@@ -1,4 +1,4 @@
-# cast-builder
+# @cast-builder/cli
 
 Compile human-writable `.castscript` files into [asciinema](https://asciinema.org) `.cast` recordings.
 
@@ -10,6 +10,14 @@ cast-builder init      my-demo.castscript
 cast-builder decompile demo.cast demo.castscript
 ```
 
+## Install
+
+```bash
+npm install -g @cast-builder/cli
+# or use without installing:
+npx @cast-builder/cli --help
+```
+
 ## Why?
 
 A `.cast` file recorded by `asciinema rec` is a timestamped log of raw terminal bytes. It's opaque, hard to edit, and requires a full re-record for any change. A `.castscript` is plain text — readable, diffable, version-controlled, and re-compiled in milliseconds.
@@ -17,9 +25,14 @@ A `.cast` file recorded by `asciinema rec` is a timestamped log of raw terminal 
 ## Quick start
 
 ```bash
-npm install
-npm run dev -- init my-demo.castscript   # scaffold a starter script
-npm run dev -- compile my-demo.castscript my-demo.cast
+# Scaffold a starter script
+npx @cast-builder/cli init my-demo.castscript
+
+# Edit my-demo.castscript, then compile
+npx @cast-builder/cli compile my-demo.castscript my-demo.cast
+
+# Play it
+asciinema play my-demo.cast
 ```
 
 ## `.castscript` format
@@ -84,11 +97,13 @@ Modifiers: `bold`, `dim`, `italic`, `underline`, `green`, `red`, `yellow`, `blue
 
 ```
 cast-builder compile <script> [output] [options]
-  -f, --format <v2|v3>       Output format (default: v3)
-  --typing-speed <speed>     Override typing speed (slow|normal|fast|instant|Nms)
-  --seed <n>                 RNG seed for deterministic/reproducible timing
-  --no-jitter                Disable timing jitter (fully deterministic output)
-  --overwrite                Overwrite existing output file
+  -f, --format <v2|v3>        Output format (default: v3)
+  --typing-speed <speed>      Override typing speed (slow|normal|fast|instant|Nms)
+  --seed <n>                  RNG seed for deterministic/reproducible timing
+  --no-jitter                 Disable timing jitter (fully deterministic output)
+  --now <timestamp>           Override cast header timestamp (Unix seconds; use 0
+                              for reproducible/shareable output)
+  --overwrite                 Overwrite existing output file
 
 cast-builder validate <script>
   Parse and type-check a .castscript without producing output.
@@ -105,38 +120,40 @@ cast-builder decompile <cast> [output] [options]
   Reverse-engineer an existing .cast file into an editable .castscript.
   Supports asciicast v2 and v3. Best-effort: ANSI state reconstruction
   is lossy, but gives a solid starting point for editing.
-  --prompt <string>    Known prompt string to improve command detection
+  --prompt <string>    Known prompt suffix to improve command detection
   --no-strip           Preserve raw ANSI escape sequences in output lines
 ```
 
 ## Development
 
 ```bash
-npm install          # install dependencies
+npm install          # install all workspace dependencies (from monorepo root)
 npm run build        # compile TypeScript → dist/
-npm run dev          # run directly via tsx (no build step)
+npm run dev          # run directly via tsx (no build step, from monorepo root)
 npm test             # run test suite
 npm run test:watch   # watch mode
 npm run lint         # ESLint
 npm run format       # Prettier
 ```
 
+> **Note:** `npm run dev` must be run from the **monorepo root** as:
+> `npm run dev -- compile examples/hello-world.castscript out.cast`
+
 ## Project structure
 
 ```
 src/
-  index.ts          CLI entry-point
-  cli/              Command handlers (compile, validate, preview, init, decompile)
-  parser/           Lexer, parser, and AST types
-  compiler/         Compiler, timing engine
-  encoder/          v2 and v3 asciicast encoders
-  util/             ANSI utilities, duration parser, seeded RNG
+  index.ts            CLI entry-point (commander wiring)
+  commands/           Command handlers
+    compile.ts        cast-builder compile
+    validate.ts       cast-builder validate
+    preview.ts        cast-builder preview
+    init.ts           cast-builder init
+    decompile.ts      cast-builder decompile
+  resolvers/
+    node.ts           Node.js FileResolver (the only file that imports node:fs)
 tests/
-  parser/           Lexer and parser unit tests
-  compiler/         Timing engine and ANSI utility tests
-  encoder/          v3 encoder tests
-  golden/           Golden-file integration tests
-examples/           Example .castscript files
+  cli.test.ts         CLI integration tests (spawn dist/index.js subprocess)
 ```
 
 ## Relationship to `cast-edit`
@@ -150,4 +167,4 @@ examples/           Example .castscript files
 
 ## Programmatic use
 
-To use cast-builder as a library (no CLI), install [`@cast-builder/core`](https://www.npmjs.com/package/@cast-builder/core) instead.
+To use cast-builder as a library (no CLI), install [`@cast-builder/core`](https://www.npmjs.com/package/@cast-builder/core) instead — it has zero runtime dependencies and is browser-safe.

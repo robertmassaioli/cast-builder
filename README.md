@@ -15,8 +15,8 @@ asciinema play demo.cast
 
 | Package | npm | Description |
 |---|---|---|
-| [`packages/core`](./packages/core) | [`@cast-builder/core`](https://www.npmjs.com/package/@cast-builder/core) | Core library — parser, compiler, encoders. Zero runtime dependencies. |
-| [`packages/cli`](./packages/cli) | [`cast-builder`](https://www.npmjs.com/package/cast-builder) | CLI tool — wraps `@cast-builder/core` with `commander`. |
+| [`packages/core`](./packages/core) | [`@cast-builder/core`](https://www.npmjs.com/package/@cast-builder/core) | Core library — parser, compiler, encoders. Zero runtime deps. Browser-safe. |
+| [`packages/cli`](./packages/cli) | [`@cast-builder/cli`](https://www.npmjs.com/package/@cast-builder/cli) | CLI tool — wraps `@cast-builder/core` with `commander`. |
 
 ---
 
@@ -26,10 +26,10 @@ asciinema play demo.cast
 
 ```bash
 # Scaffold a starter script
-npx cast-builder init my-demo.castscript
+npx @cast-builder/cli init my-demo.castscript
 
 # Edit my-demo.castscript, then compile
-npx cast-builder compile my-demo.castscript my-demo.cast
+npx @cast-builder/cli compile my-demo.castscript my-demo.cast
 
 # Play it
 asciinema play my-demo.cast
@@ -42,13 +42,25 @@ npm install @cast-builder/core
 ```
 
 ```typescript
-import { parse, compile, encodeV3 } from '@cast-builder/core';
-import { readFile, writeFile } from 'node:fs/promises';
+import { parse, compile, encodeV3, FileResolverErrorCode } from '@cast-builder/core';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 
-const source = await readFile('demo.castscript', 'utf8');
+const scriptPath = 'demo.castscript';
+const source = readFileSync(scriptPath, 'utf8');
 const { config, nodes } = parse(source);
 config.typingSeed = 42; // deterministic timing
-const cast = compile(config, nodes, process.cwd());
+
+// compile() is async — provide a FileResolver for ">>" and "include:" directives
+const cast = await compile(config, nodes, {
+  resolver: (path) => {
+    try {
+      return { ok: true, content: readFileSync(resolve(dirname(scriptPath), path), 'utf8') };
+    } catch {
+      return { ok: false, code: FileResolverErrorCode.NotFound, message: `Not found: ${path}`, path };
+    }
+  },
+});
 await writeFile('demo.cast', encodeV3(cast));
 ```
 
@@ -120,6 +132,7 @@ cast-builder compile <script> [output]
   --typing-speed <speed>   slow | normal | fast | instant | Nms
   --seed <n>               RNG seed for deterministic/reproducible timing
   --no-jitter              Disable timing jitter
+  --now <timestamp>        Override cast header timestamp (Unix seconds; 0 = strip date)
   --overwrite              Overwrite existing output file
 
 cast-builder validate <script>
@@ -165,7 +178,7 @@ npm run build
 # Run all tests (both packages)
 npm test
 
-# Run the CLI in dev mode (no build step)
+# Run the CLI in dev mode (no build step, from monorepo root)
 npm run dev -- compile packages/core/examples/hello-world.castscript out.cast
 ```
 
