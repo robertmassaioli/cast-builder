@@ -3,8 +3,17 @@
   "version": "0.1.0",
   "description": "Compile .castscript files into asciinema .cast recordings",
   "type": "module",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "README.md"
+  ],
   "bin": {
     "cast-builder": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "scripts": {
     "build": "tsc",
