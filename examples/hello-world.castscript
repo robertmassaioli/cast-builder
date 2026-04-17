@@ -1,0 +1,4 @@
+--- script ---
+
+$ echo "Hello, world!"
+> Hello, world!
