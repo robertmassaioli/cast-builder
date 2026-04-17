@@ -1,8 +1,0 @@
-# Shared login block — include in other scripts with:
-#   include: modular/login.castscript#login
-
-[login]
-$ ssh user@server.example.com
-type: user@server.example.com's password: 
-hidden: my-secret-password
-> Welcome to Ubuntu 22.04.3 LTS
