@@ -10,8 +10,14 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "dist/**/*.d.ts.map",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robertmassaioli/cast-builder"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
