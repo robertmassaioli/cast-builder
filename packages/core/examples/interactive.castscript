@@ -1,0 +1,37 @@
+--- config ---
+title:        Interactive Prompts Demo
+width:        80
+height:       24
+prompt:       user@host:~$ 
+typing-speed: normal
+
+--- script ---
+
+marker: Login
+
+$ ssh user@server.example.com
+> The authenticity of host 'server.example.com' can't be established.
+> RSA key fingerprint is SHA256:abc123def456.
+type: Are you sure you want to continue connecting (yes/no)? 
+wait: 1s
+type: yes
+> Warning: Permanently added 'server.example.com' to the list of known hosts.
+type: user@server.example.com's password: 
+hidden: my-secret-password
+> 
+> Welcome to Ubuntu 22.04.3 LTS
+
+wait: 500ms
+
+marker: Run command
+
+$ uptime
+>  12:34:56 up 42 days, 3:21,  2 users,  load average: 0.12, 0.08, 0.05
+
+wait: 1s
+
+marker: Exit
+
+$ exit
+> logout
+> Connection to server.example.com closed.

@@ -1,0 +1,57 @@
+{
+  "name": "@cast-builder/core",
+  "version": "0.1.0",
+  "description": "Core library for parsing and compiling .castscript files into asciinema .cast recordings",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./parser": {
+      "import": "./dist/parser/parser.js",
+      "types": "./dist/parser/parser.d.ts"
+    },
+    "./compiler": {
+      "import": "./dist/compiler/compiler.js",
+      "types": "./dist/compiler/compiler.d.ts"
+    },
+    "./encoder/v2": {
+      "import": "./dist/encoder/v2.js",
+      "types": "./dist/encoder/v2.d.ts"
+    },
+    "./encoder/v3": {
+      "import": "./dist/encoder/v3.js",
+      "types": "./dist/encoder/v3.d.ts"
+    }
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "dist/**/*.js.map",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src tests",
+    "format": "prettier --write src tests"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.0.0"
+  }
+}
