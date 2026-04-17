@@ -114,10 +114,12 @@ export function parse(source: string): ParseResult {
       }
 
       case 'set': {
+        // "set key: value" — preserve trailing whitespace in value (e.g. for prompt)
         const setMatch = (token.value ?? '').match(/^(\S[^:]*?)\s*:\s*(.*)$/);
         if (!setMatch) throw new ParseError(token.line, `Invalid set directive: "${token.raw}"`);
         const key = (setMatch[1] ?? '').trim() as ConfigKey;
-        const value = (setMatch[2] ?? '').trim();
+        // Preserve trailing whitespace — significant for 'prompt' key
+        const value = setMatch[2] ?? '';
         nodes.push({ kind: 'set', key, value });
         idx++;
         break;
@@ -172,6 +174,8 @@ function parseConfigSection(
     }
 
     // Parse key: value
+    // Consume all leading whitespace after the colon (alignment spaces),
+    // but preserve trailing whitespace in the value (significant for `prompt`).
     const match = token.raw.match(/^(\S[^:]*?)\s*:\s*(.*)$/);
     if (!match) {
       idx++;
@@ -179,7 +183,8 @@ function parseConfigSection(
     }
 
     const key = (match[1] ?? '').trim();
-    const value = (match[2] ?? '').trim();
+    // Greedy capture — trailing whitespace preserved; applyConfigKey trims per-key
+    const value = match[2] ?? '';
 
     applyConfigKey(key, value, config, token.line);
     idx++;
@@ -189,39 +194,41 @@ function parseConfigSection(
 }
 
 function applyConfigKey(key: string, value: string, config: Config, line: number): void {
+  // For most keys trim the value; for `prompt` preserve trailing whitespace
+  const trimmed = value.trimEnd();
   switch (key) {
     case 'title':
-      config.title = value;
+      config.title = trimmed;
       break;
     case 'width':
-      config.width = parseInt(value, 10);
+      config.width = parseInt(trimmed, 10);
       break;
     case 'height':
-      config.height = parseInt(value, 10);
+      config.height = parseInt(trimmed, 10);
       break;
     case 'shell':
-      config.shell = value;
+      config.shell = trimmed;
       break;
     case 'prompt':
-      config.prompt = value;
+      config.prompt = value; // preserve trailing space (e.g. "$ " or "user@host:~$ ")
       break;
     case 'theme':
-      config.theme = value;
+      config.theme = trimmed;
       break;
     case 'typing-speed':
-      config.typingSpeed = parseTypingSpeed(value, line);
+      config.typingSpeed = parseTypingSpeed(trimmed, line);
       break;
     case 'typing-seed':
-      config.typingSeed = parseInt(value, 10);
+      config.typingSeed = parseInt(trimmed, 10);
       break;
     case 'idle-time':
-      config.idleTime = parseFloat(value);
+      config.idleTime = parseFloat(trimmed);
       break;
     case 'output-format':
-      if (value === 'v2' || value === 'v3') {
-        config.outputFormat = value;
+      if (trimmed === 'v2' || trimmed === 'v3') {
+        config.outputFormat = trimmed;
       } else {
-        throw new ParseError(line, `Invalid output-format: "${value}". Must be "v2" or "v3".`);
+        throw new ParseError(line, `Invalid output-format: "${trimmed}". Must be "v2" or "v3".`);
       }
       break;
     case 'env': {

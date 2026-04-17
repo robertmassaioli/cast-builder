@@ -1,25 +1,53 @@
 /**
  * Compiler — converts a ParseResult into a CompiledCast.
- * Phase 0: structure and type-safe stubs. Full implementation in Phase 1.
+ * Phase 1: full implementation of all directives including file-output,
+ * include/blocks, full set key support, and styled prompt rendering.
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { CLEAR_SCREEN, CRLF, RESET, modifiersToAnsi } from '../util/ansi.js';
 import { TimingEngine } from './timing.js';
 import type { CastEvent, CastHeader, CompiledCast } from './types.js';
+import { parse, parseStyledText } from '../parser/parser.js';
 import type { Config, ScriptNode, StyledText } from '../parser/types.js';
 
-export function compile(config: Config, nodes: ScriptNode[]): CompiledCast {
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export function compile(
+  config: Config,
+  nodes: ScriptNode[],
+  sourceDir: string = process.cwd(),
+): CompiledCast {
   const header = buildHeader(config);
   const events: CastEvent[] = [];
   const engine = new TimingEngine(config.typingSpeed, config.typingSeed);
 
-  let firstBlock = true;
+  // Mutable compile-time config (mid-script `set` directives mutate this copy)
+  const liveConfig: Config = { ...config, env: { ...config.env } };
 
+  compileNodes(nodes, events, engine, liveConfig, sourceDir);
+
+  // Emit reset at end to restore terminal state
+  events.push({ time: engine.seconds, code: 'o', data: RESET });
+
+  return { header, events };
+}
+
+// ── Internal node compiler ────────────────────────────────────────────────────
+
+function compileNodes(
+  nodes: ScriptNode[],
+  events: CastEvent[],
+  engine: TimingEngine,
+  config: Config,
+  sourceDir: string,
+  isFirstBlock = { value: true },
+): void {
   for (const node of nodes) {
     switch (node.kind) {
       case 'comment':
       case 'block-label':
-        // No output
         break;
 
       case 'marker':
@@ -43,17 +71,18 @@ export function compile(config: Config, nodes: ScriptNode[]): CompiledCast {
         break;
 
       case 'command': {
-        // Insert idle gap between command blocks (skip before first)
-        if (!firstBlock) {
+        // Insert idle gap between command blocks (skip before the very first)
+        if (!isFirstBlock.value) {
           engine.advance(config.idleTime * 1000);
         }
-        firstBlock = false;
+        isFirstBlock.value = false;
 
-        // Render prompt
-        const promptData = renderStyledText([{ kind: 'plain', text: config.prompt }]);
+        // Render prompt (supports inline style tags)
+        const promptText = parseStyledText(config.prompt);
+        const promptData = renderStyledText(promptText);
         events.push({ time: engine.seconds, code: 'o', data: promptData });
 
-        // Type each character of the command
+        // Type each character of the command with realistic jitter
         for (const ch of node.text) {
           engine.typeChar();
           events.push({ time: engine.seconds, code: 'o', data: ch });
@@ -87,49 +116,122 @@ export function compile(config: Config, nodes: ScriptNode[]): CompiledCast {
       }
 
       case 'hidden': {
-        // Advance timing only — no output events
+        // Advance timing only — no output events (simulates non-echoing input)
         for (const _ch of node.text) {
           engine.typeChar();
         }
         break;
       }
 
-      case 'file-output':
-        // Phase 1: read file and emit lines. Phase 0: emit placeholder.
-        events.push({
-          time: engine.seconds,
-          code: 'o',
-          data: `[file output: ${node.path}]${CRLF}`,
-        });
-        break;
-
-      case 'include':
-        // Phase 2: resolve and inline included script. Phase 0: placeholder.
-        events.push({
-          time: engine.seconds,
-          code: 'o',
-          data: `[include: ${node.path}${node.block ? `#${node.block}` : ''}]${CRLF}`,
-        });
-        break;
-
-      case 'set':
-        // Apply mid-script config overrides
-        if (node.key === 'typing-speed') {
-          const speed = node.value === 'instant' || node.value === 'fast' ||
-            node.value === 'normal' || node.value === 'slow'
-            ? node.value
-            : parseInt(node.value, 10) || 'normal';
-          engine.setSpeed(speed);
+      case 'file-output': {
+        // Read the file relative to the source script's directory
+        const filePath = resolve(sourceDir, node.path);
+        let fileContent: string;
+        try {
+          fileContent = readFileSync(filePath, 'utf8');
+        } catch {
+          throw new Error(`file-output: cannot read file "${filePath}"`);
         }
-        // Other mid-script set keys handled in Phase 1
+        const lines = fileContent.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          // Skip trailing empty line from final newline
+          if (i === lines.length - 1 && line === '') continue;
+          engine.emitLine(i);
+          events.push({ time: engine.seconds, code: 'o', data: (line ?? '') + CRLF });
+        }
         break;
+      }
+
+      case 'include': {
+        // Resolve path relative to current source directory
+        const includePath = resolve(sourceDir, node.path);
+        let includeSource: string;
+        try {
+          includeSource = readFileSync(includePath, 'utf8');
+        } catch {
+          throw new Error(`include: cannot read file "${includePath}"`);
+        }
+        const includeDir = dirname(includePath);
+        const { nodes: includeNodes } = parse(includeSource);
+
+        let nodesToCompile: ScriptNode[];
+        if (node.block) {
+          nodesToCompile = extractBlock(includeNodes, node.block);
+        } else {
+          // Filter out block-label nodes when including the whole file
+          nodesToCompile = includeNodes.filter((n) => n.kind !== 'block-label');
+        }
+
+        compileNodes(nodesToCompile, events, engine, config, includeDir, isFirstBlock);
+        break;
+      }
+
+      case 'set': {
+        // Apply mid-script config key overrides
+        switch (node.key) {
+          case 'typing-speed': {
+            const speed =
+              node.value === 'instant' ||
+              node.value === 'fast' ||
+              node.value === 'normal' ||
+              node.value === 'slow'
+                ? node.value
+                : parseInt(node.value, 10) || ('normal' as const);
+            config.typingSpeed = speed;
+            engine.setSpeed(speed);
+            break;
+          }
+          case 'prompt':
+            config.prompt = node.value;
+            break;
+          case 'idle-time':
+            config.idleTime = parseFloat(node.value);
+            break;
+          case 'title':
+            config.title = node.value;
+            break;
+          // Other keys (width, height, etc.) are not meaningful mid-script
+          default:
+            break;
+        }
+        break;
+      }
+    }
+  }
+}
+
+// ── Block extraction ──────────────────────────────────────────────────────────
+
+/**
+ * Extract nodes belonging to a named [block] from a node list.
+ * Returns the nodes between the named block-label and the next block-label
+ * (or end of file).
+ */
+function extractBlock(nodes: ScriptNode[], blockName: string): ScriptNode[] {
+  let inBlock = false;
+  const result: ScriptNode[] = [];
+
+  for (const node of nodes) {
+    if (node.kind === 'block-label') {
+      if (node.name === blockName) {
+        inBlock = true;
+      } else if (inBlock) {
+        // Hit the next block label — stop
+        break;
+      }
+      continue;
+    }
+    if (inBlock) {
+      result.push(node);
     }
   }
 
-  // Emit reset at end to restore terminal state
-  events.push({ time: engine.seconds, code: 'o', data: RESET });
+  if (!inBlock) {
+    throw new Error(`include: block "[${blockName}]" not found`);
+  }
 
-  return { header, events };
+  return result;
 }
 
 // ── Header builder ────────────────────────────────────────────────────────────

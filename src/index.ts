@@ -9,6 +9,7 @@ import { registerCompile } from './cli/compile.js';
 import { registerValidate } from './cli/validate.js';
 import { registerPreview } from './cli/preview.js';
 import { registerInit } from './cli/init.js';
+import { registerDecompile } from './cli/decompile.js';
 
 const program = new Command();
 
@@ -21,5 +22,6 @@ registerCompile(program);
 registerValidate(program);
 registerPreview(program);
 registerInit(program);
+registerDecompile(program);
 
 program.parse(process.argv);

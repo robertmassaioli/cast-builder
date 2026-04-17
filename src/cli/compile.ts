@@ -3,6 +3,7 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { parse } from '../parser/parser.js';
 import { compile } from '../compiler/compiler.js';
 import { encodeV3 } from '../encoder/v3.js';
@@ -28,9 +29,9 @@ export function registerCompile(program: Command): void {
     .option('--overwrite', 'Overwrite output file if it exists')
     .action((scriptPath: string, outputPath: string | undefined, opts: CompileOptions) => {
       // Read input
-      const source = scriptPath === '-'
-        ? readFileSync('/dev/stdin', 'utf8')
-        : readFileSync(scriptPath, 'utf8');
+      const isStdin = scriptPath === '-';
+      const source = isStdin ? readFileSync('/dev/stdin', 'utf8') : readFileSync(scriptPath, 'utf8');
+      const sourceDir = isStdin ? process.cwd() : dirname(resolve(scriptPath));
 
       // Parse
       const { config, nodes } = parse(source);
@@ -48,7 +49,7 @@ export function registerCompile(program: Command): void {
       if (opts.noJitter) { config.typingSpeed = 'instant'; }
 
       // Compile
-      const compiled = compile(config, nodes);
+      const compiled = compile(config, nodes, sourceDir);
 
       // Encode
       const output = config.outputFormat === 'v2' ? encodeV2(compiled) : encodeV3(compiled);
