@@ -3,10 +3,11 @@
 Compile human-writable `.castscript` files into [asciinema](https://asciinema.org) `.cast` recordings.
 
 ```
-cast-builder compile demo.castscript demo.cast
-cast-builder validate demo.castscript
-cast-builder preview  demo.castscript
-cast-builder init     my-demo.castscript
+cast-builder compile   demo.castscript demo.cast
+cast-builder validate  demo.castscript
+cast-builder preview   demo.castscript
+cast-builder init      my-demo.castscript
+cast-builder decompile demo.cast demo.castscript
 ```
 
 ## Why?
@@ -84,14 +85,28 @@ Modifiers: `bold`, `dim`, `italic`, `underline`, `green`, `red`, `yellow`, `blue
 ```
 cast-builder compile <script> [output] [options]
   -f, --format <v2|v3>       Output format (default: v3)
-  --typing-speed <speed>     Override typing speed
-  --seed <n>                 RNG seed for deterministic timing
-  --no-jitter                Disable timing jitter
+  --typing-speed <speed>     Override typing speed (slow|normal|fast|instant|Nms)
+  --seed <n>                 RNG seed for deterministic/reproducible timing
+  --no-jitter                Disable timing jitter (fully deterministic output)
   --overwrite                Overwrite existing output file
 
-cast-builder validate <script>   Validate without compiling
-cast-builder preview  <script>   Compile and play immediately
-cast-builder init     [output]   Generate a starter .castscript
+cast-builder validate <script>
+  Parse and type-check a .castscript without producing output.
+  Exits 0 on success, 1 on error (with line numbers).
+
+cast-builder preview <script>
+  Compile and immediately pipe to `asciinema play` for instant preview.
+  Requires asciinema to be installed and on PATH.
+
+cast-builder init [output]
+  Generate a starter .castscript scaffold (default: demo.castscript).
+
+cast-builder decompile <cast> [output] [options]
+  Reverse-engineer an existing .cast file into an editable .castscript.
+  Supports asciicast v2 and v3. Best-effort: ANSI state reconstruction
+  is lossy, but gives a solid starting point for editing.
+  --prompt <string>    Known prompt string to improve command detection
+  --no-strip           Preserve raw ANSI escape sequences in output lines
 ```
 
 ## Development
@@ -111,7 +126,7 @@ npm run format       # Prettier
 ```
 src/
   index.ts          CLI entry-point
-  cli/              Command handlers (compile, validate, preview, init)
+  cli/              Command handlers (compile, validate, preview, init, decompile)
   parser/           Lexer, parser, and AST types
   compiler/         Compiler, timing engine
   encoder/          v2 and v3 asciicast encoders
