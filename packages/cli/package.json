@@ -1,5 +1,5 @@
 {
-  "name": "cast-builder",
+  "name": "@cast-builder/cli",
   "version": "0.1.0",
   "description": "CLI tool for compiling .castscript files into asciinema .cast recordings",
   "type": "module",
