@@ -14,104 +14,233 @@ The goal is for `@cast-builder/core` to run **entirely in a web browser** — no
 
 ---
 
-## 1. Current FS Touch Points
+## 1. Full Audit of Environmental Assumptions
 
-There are exactly **two places** in `@cast-builder/core` that touch the filesystem,
-both in `src/compiler/compiler.ts`:
+A complete scan of `@cast-builder/core/src/` reveals **four** touch points that
+are either non-browser-safe or reduce determinism/testability:
 
-| Directive | What it does today | Lines |
-|---|---|---|
-| `file-output` (`>> path`) | `readFileSync(resolve(sourceDir, path))` | 131–138 |
-| `include` (`include: path`) | `readFileSync(resolve(sourceDir, path))` + re-parses + recurses | 151–162 |
+| Location | API used | Browser-safe? | Issue |
+|---|---|---|---|
+| `compiler/compiler.ts:7-8` | `import { readFileSync } from 'node:fs'` | ❌ | Node.js only |
+| `compiler/compiler.ts:8` | `import { dirname, resolve } from 'node:path'` | ❌ | Node.js only |
+| `compiler/compiler.ts:20` | `sourceDir: string = process.cwd()` | ❌ | `process` does not exist in browsers |
+| `compiler/compiler.ts:247` | `Math.floor(Date.now() / 1000)` | ✅ | Browser-safe, but not injectable for testing |
+| `compiler/timing.ts:17` | `Math.floor(Math.random() * 0xffffffff)` | ✅ | Browser-safe, but makes timing non-deterministic without a seed |
 
-There is also a default parameter `sourceDir: string = process.cwd()` in the
-`compile()` signature, which references `process.cwd()` — a Node.js global that
-does not exist in browsers.
+### Summary
 
-No other file in `src/` touches `node:fs`, `node:path`, or `process`.
+- **`node:fs` + `node:path` + `process.cwd()`** — genuinely block browser use.
+  Must be removed from core.
+- **`Date.now()`** — works in browsers, but callers cannot control the recorded
+  timestamp (e.g. for reproducible output or zero-ing out timestamps before sharing).
+  Should be injectable via `CompileOptions`.
+- **`Math.random()`** — works in browsers, but already has a `typingSeed` escape
+  hatch via `Config`. The default unseeded path is fine; no change needed.
+
+No other file in `src/` imports any Node.js built-ins.
 
 ---
 
-## 2. The Solution: A FileResolver Interface
+## 2. The Solution: FileResolver, CompileOptions, and a Typed Error Model
 
-Replace the two `readFileSync` calls with a **caller-supplied async resolver
-function**. The core library becomes a pure transform: `source text → cast events`.
-The host environment (CLI, browser, bundler plugin) supplies the I/O.
+### 2.1 FileResolver — typed result, not throw-on-error
 
-### 2.1 The interface
+Rather than having the resolver throw an exception on failure (which forces
+callers to catch untyped errors), it returns a **discriminated union**. This
+makes error handling explicit at the type level and allows the compiler to
+include rich context (which directive triggered the read, what the path was)
+in error events rather than crashing the whole compilation.
+
+```typescript
+// src/compiler/types.ts (addition)
+
+// ── File resolver result ───────────────────────────────────────────────────
+
+/**
+ * Structured error codes for file resolution failures.
+ * Using an enum (not a string) so callers can switch on the code exhaustively.
+ */
+export enum FileResolverErrorCode {
+  /** The file does not exist at the given path. */
+  NotFound = 'NOT_FOUND',
+  /** The file exists but cannot be read (permissions, I/O error, etc.). */
+  ReadError = 'READ_ERROR',
+  /** The path is outside the permitted root / sandbox. */
+  AccessDenied = 'ACCESS_DENIED',
+  /** The resolver does not support this type of path (e.g. absolute path in browser). */
+  UnsupportedPath = 'UNSUPPORTED_PATH',
+}
+
+export interface FileResolverError {
+  readonly ok: false;
+  readonly code: FileResolverErrorCode;
+  /** Human-readable description of what went wrong. */
+  readonly message: string;
+  /** The original path that was requested. */
+  readonly path: string;
+}
+
+export interface FileResolverSuccess {
+  readonly ok: true;
+  /** The file contents as a UTF-8 string. */
+  readonly content: string;
+}
+
+export type FileResolverResult = FileResolverSuccess | FileResolverError;
+
+/**
+ * A function that resolves a file path to its contents.
+ * Called by the compiler for `>>` (file-output) and `include:` directives.
+ *
+ * Returns a discriminated union — never throws. The compiler decides how to
+ * handle errors (emit a warning event, skip the directive, or abort).
+ *
+ * @param path  The raw path string from the directive, verbatim.
+ *              The resolver is responsible for interpreting it relative to
+ *              whatever base makes sense in its environment.
+ */
+export type FileResolver = (path: string) => FileResolverResult | Promise<FileResolverResult>;
+
+/**
+ * A no-op resolver that returns ACCESS_DENIED for any path.
+ * The default when no resolver is provided — safe in all environments.
+ * Scripts with no `>>` or `include:` directives never invoke it.
+ */
+export const NULL_RESOLVER: FileResolver = (path: string): FileResolverError => ({
+  ok: false,
+  code: FileResolverErrorCode.AccessDenied,
+  message: `File access is not available. Pass a FileResolver to compile() to enable ">>" and "include:" directives.`,
+  path,
+});
+
+// ── Compiler options ───────────────────────────────────────────────────────
+
+/**
+ * Options passed to compile() to inject environmental dependencies.
+ * All fields are optional — sensible defaults apply in every environment.
+ */
+export interface CompileOptions {
+  /**
+   * Resolver for file paths referenced by `>>` and `include:` directives.
+   * Defaults to NULL_RESOLVER (file access disabled).
+   */
+  resolver?: FileResolver;
+
+  /**
+   * Override the Unix timestamp (seconds) stored in the cast header.
+   * Useful for:
+   *   - Reproducible/deterministic output (pass a fixed value)
+   *   - Stripping recording date before sharing (pass 0)
+   *   - Testing (pass a known value to assert on the header)
+   *
+   * Defaults to Math.floor(Date.now() / 1000) — current wall-clock time.
+   */
+  now?: number;
+
+  /**
+   * How to handle a FileResolverError when `>>` or `include:` fails.
+   *
+   * - 'error' (default): abort compilation and throw a CompileError
+   * - 'warn':  emit a comment-like output event with the error message and continue
+   * - 'skip':  silently skip the directive and continue
+   */
+  onResolveError?: 'error' | 'warn' | 'skip';
+}
+```
+
+### 2.2 CompileError — structured compilation errors
 
 ```typescript
 // src/compiler/types.ts (addition)
 
 /**
- * A function that resolves a file path to its string contents.
- * The core library calls this for `>>` (file-output) and `include:` directives.
- *
- * - In Node.js/CLI: implemented with `fs.readFileSync` or `fs.promises.readFile`
- * - In a browser: implemented with `fetch()`, an in-memory Map, or a virtual FS
- * - In tests: implemented with a simple `Map<string, string>`
- *
- * @param path  The raw path string from the directive (e.g. "fixtures/out.txt"
- *              or "common/login.castscript"). The resolver is responsible for
- *              interpreting this relative to whatever base makes sense in its
- *              environment.
- * @returns     The file contents as a string, or throws if not found.
+ * Thrown by compile() when a fatal error occurs (e.g. file not found in 'error' mode,
+ * or a resize with invalid dimensions).
  */
-export type FileResolver = (path: string) => string | Promise<string>;
-
-/**
- * A no-op resolver that throws for any file access.
- * Used as the default so that scripts without `>>` or `include:` work
- * in all environments with zero configuration.
- */
-export const NULL_RESOLVER: FileResolver = (path: string) => {
-  throw new Error(
-    `File access required for "${path}" but no FileResolver was provided. ` +
-    `Pass a resolver as the third argument to compile().`
-  );
-};
+export class CompileError extends Error {
+  constructor(
+    /** Machine-readable code for programmatic handling. */
+    public readonly code: 'FILE_RESOLVER_ERROR' | 'INVALID_DIRECTIVE' | 'INCLUDE_DEPTH_EXCEEDED',
+    message: string,
+    /** The underlying FileResolverError, if applicable. */
+    public readonly cause?: FileResolverError,
+  ) {
+    super(message);
+    this.name = 'CompileError';
+  }
+}
 ```
 
-### 2.2 Updated `compile()` signature
+### 2.3 Updated `compile()` signature
 
 ```typescript
-// Before (Node.js only)
+// Before (Node.js only, synchronous)
 export function compile(
   config: Config,
   nodes: ScriptNode[],
   sourceDir: string = process.cwd(),
 ): CompiledCast
 
-// After (browser-safe, async)
+// After (browser-safe, async, options object)
 export async function compile(
   config: Config,
   nodes: ScriptNode[],
-  resolver?: FileResolver,
+  options?: CompileOptions,
 ): Promise<CompiledCast>
 ```
 
-The `resolver` parameter replaces `sourceDir`. Path interpretation is entirely
-delegated to the resolver — the core library passes the raw path string from
-the directive verbatim and awaits the result.
+Using an **options object** (rather than positional arguments) makes it easy to
+add future options without breaking callers again.
 
-### 2.3 Updated internal usage
+### 2.4 Updated internal usage
 
 ```typescript
-// file-output
+// Inside compileNodes():
+
 case 'file-output': {
-  const fileContent = await resolver(node.path);
-  const lines = fileContent.split('\n');
-  // ... emit lines as events
+  const result = await options.resolver(node.path);
+  if (!result.ok) {
+    switch (options.onResolveError) {
+      case 'skip': continue;
+      case 'warn':
+        events.push({ time: engine.seconds, code: 'o',
+          data: `[warning: could not read "${node.path}": ${result.message}]\r\n` });
+        continue;
+      default: // 'error'
+        throw new CompileError('FILE_RESOLVER_ERROR',
+          `file-output: ${result.message} (code: ${result.code})`, result);
+    }
+  }
+  const lines = result.content.split('\n');
+  // ... emit lines
   break;
 }
 
-// include
 case 'include': {
-  const includeSource = await resolver(node.path);
-  const { nodes: includeNodes } = parse(includeSource);
-  // ... compile included nodes recursively (passing same resolver)
-  await compileNodes(nodesToCompile, events, engine, config, resolver, isFirstBlock);
+  const result = await options.resolver(node.path);
+  if (!result.ok) {
+    // same error handling as above
+  }
+  const { nodes: includeNodes } = parse(result.content);
+  // ... compile recursively
   break;
+}
+```
+
+### 2.5 Injectable `now` for deterministic headers
+
+```typescript
+// Inside buildHeader():
+function buildHeader(config: Config, options: CompileOptions): CastHeader {
+  return {
+    version: config.outputFormat === 'v2' ? 2 : 3,
+    cols: config.width,
+    rows: config.height,
+    // Caller-injectable — defaults to current time
+    timestamp: options.now ?? Math.floor(Date.now() / 1000),
+    ...(config.title ? { title: config.title } : {}),
+    ...(Object.keys(config.env).length > 0 ? { env: config.env } : {}),
+  };
 }
 ```
 
@@ -119,69 +248,136 @@ case 'include': {
 
 ## 3. FileResolver Implementations
 
-### 3.1 Node.js synchronous (CLI, default)
+### 3.1 Node.js (CLI)
 
 ```typescript
 // packages/cli/src/resolvers/node.ts
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  FileResolverErrorCode,
+  type FileResolverResult,
+} from '@cast-builder/core';
 
-export function createNodeResolver(baseDir: string): FileResolver {
-  return (path: string): string => {
-    return readFileSync(resolve(baseDir, path), 'utf8');
+export function createNodeResolver(baseDir: string) {
+  return (path: string): FileResolverResult => {
+    const fullPath = resolve(baseDir, path);
+    if (!existsSync(fullPath)) {
+      return { ok: false, code: FileResolverErrorCode.NotFound,
+               message: `File not found: ${fullPath}`, path };
+    }
+    try {
+      const content = readFileSync(fullPath, 'utf8');
+      return { ok: true, content };
+    } catch (err) {
+      return { ok: false, code: FileResolverErrorCode.ReadError,
+               message: `Could not read "${fullPath}": ${String(err)}`, path };
+    }
   };
 }
 ```
 
-The CLI passes this to `compile()`:
+The CLI passes this via `CompileOptions`:
 
 ```typescript
 // packages/cli/src/commands/compile.ts
 import { createNodeResolver } from '../resolvers/node.js';
 
-const resolver = createNodeResolver(sourceDir);
-const compiled = await compile(config, nodes, resolver);
+const compiled = await compile(config, nodes, {
+  resolver: createNodeResolver(sourceDir),
+  now: opts.timestamp ? parseInt(opts.timestamp, 10) : undefined,
+  onResolveError: 'error',
+});
 ```
 
-### 3.2 Browser fetch-based
+### 3.2 Browser — fetch-based
 
 ```typescript
-// browser example (not shipped in core — implemented by the host app)
-const resolver: FileResolver = async (path: string) => {
-  const response = await fetch(`/castscripts/${path}`);
-  if (!response.ok) throw new Error(`Could not fetch ${path}: ${response.status}`);
-  return response.text();
+// Browser host app (not shipped in core)
+import { FileResolverErrorCode, type FileResolverResult } from '@cast-builder/core';
+
+const resolver = async (path: string): Promise<FileResolverResult> => {
+  try {
+    const response = await fetch(`/castscripts/${path}`);
+    if (response.status === 404) {
+      return { ok: false, code: FileResolverErrorCode.NotFound,
+               message: `Not found: /castscripts/${path}`, path };
+    }
+    if (!response.ok) {
+      return { ok: false, code: FileResolverErrorCode.ReadError,
+               message: `HTTP ${response.status} fetching "${path}"`, path };
+    }
+    return { ok: true, content: await response.text() };
+  } catch (err) {
+    return { ok: false, code: FileResolverErrorCode.ReadError,
+             message: String(err), path };
+  }
 };
 
-const compiled = await compile(config, nodes, resolver);
+const compiled = await compile(config, nodes, { resolver });
 ```
 
 ### 3.3 In-memory (tests and browser editor)
 
 ```typescript
 // Perfect for unit tests and browser editors with virtual filesystems
-const files = new Map<string, string>([
+import { FileResolverErrorCode, type FileResolverResult } from '@cast-builder/core';
+
+function createMemoryResolver(files: Map<string, string>) {
+  return (path: string): FileResolverResult => {
+    const content = files.get(path);
+    if (content === undefined) {
+      return { ok: false, code: FileResolverErrorCode.NotFound,
+               message: `File not found in memory: "${path}"`, path };
+    }
+    return { ok: true, content };
+  };
+}
+
+// Usage in tests:
+const resolver = createMemoryResolver(new Map([
   ['fixtures/output.txt', 'line one\nline two\n'],
   ['common/login.castscript', '[login]\n$ ssh user@host\n'],
-]);
+]));
 
-const resolver: FileResolver = (path: string) => {
-  const content = files.get(path);
-  if (!content) throw new Error(`File not found: ${path}`);
-  return content;
-};
-
-const compiled = await compile(config, nodes, resolver);
+const compiled = await compile(config, nodes, { resolver, now: 0 });
 ```
 
-### 3.4 Virtual FS (for bundler plugins / Vite)
+### 3.4 Sandboxed resolver — path traversal protection
+
+A resolver can enforce a sandbox to prevent `include: ../../../etc/passwd`:
+
+```typescript
+import { resolve, relative } from 'node:path';
+import { FileResolverErrorCode, type FileResolverResult } from '@cast-builder/core';
+
+function createSandboxedResolver(root: string) {
+  return (path: string): FileResolverResult => {
+    const fullPath = resolve(root, path);
+    // Reject any path that escapes the root
+    if (relative(root, fullPath).startsWith('..')) {
+      return { ok: false, code: FileResolverErrorCode.AccessDenied,
+               message: `Path "${path}" escapes the sandbox root`, path };
+    }
+    // ... proceed with read
+  };
+}
+```
+
+### 3.5 Virtual FS (bundler plugins / Vite)
 
 ```typescript
 // Vite plugin example
-const resolver: FileResolver = async (path: string) => {
-  const id = await vite.pluginContainer.resolveId(path, importer);
-  const result = await vite.pluginContainer.load(id?.id ?? path);
-  return typeof result === 'string' ? result : result?.code ?? '';
+const resolver = async (path: string): Promise<FileResolverResult> => {
+  try {
+    const id = await vite.pluginContainer.resolveId(path, importer);
+    const result = await vite.pluginContainer.load(id?.id ?? path);
+    const content = typeof result === 'string' ? result : (result?.code ?? '');
+    return { ok: true, content };
+  } catch (err) {
+    return { ok: false, code: FileResolverErrorCode.ReadError,
+             message: String(err), path };
+  }
 };
 ```
 
@@ -278,48 +474,104 @@ in a browser bundle without any Node.js polyfills.
 
 ### 7.1 Update existing tests
 
-All existing tests that call `compile()` directly need `await`:
+All existing tests that call `compile()` directly need `await` and use the
+options object. Use the in-memory resolver and injectable `now` for determinism:
 
 ```typescript
 // Before
-const { events } = compile(config, nodes);
+const compiled = compile(config, nodes);
 
 // After
-const { events } = await compile(config, nodes);
+const compiled = await compile(config, nodes, { now: 0 });
 ```
+
+The `now: 0` makes the header `timestamp` deterministic in all tests —
+no more stripping timestamps in golden tests.
 
 ### 7.2 Add resolver tests
 
 ```typescript
+import { FileResolverErrorCode, CompileError } from '@cast-builder/core';
+
 it('file-output uses the resolver', async () => {
-  const resolver = (path: string) => path === 'out.txt' ? 'line1\nline2\n' : '';
-  const { nodes } = parse('--- script ---\n$ cat out.txt\n>> out.txt\n');
-  const { config } = parse('--- script ---\n');
-  const { events } = await compile(config, nodes, resolver);
-  const outputEvents = events.filter(e => e.code === 'o');
-  expect(outputEvents.some(e => e.data.includes('line1'))).toBe(true);
+  const resolver = (path: string) =>
+    path === 'out.txt'
+      ? { ok: true as const, content: 'line1\nline2\n' }
+      : { ok: false as const, code: FileResolverErrorCode.NotFound,
+          message: `not found: ${path}`, path };
+
+  const { config, nodes } = parse('--- script ---\n$ cat out.txt\n>> out.txt\n');
+  const { events } = await compile(config, nodes, { resolver, now: 0 });
+  const output = events.filter(e => e.code === 'o').map(e => e.data).join('');
+  expect(output).toContain('line1');
+  expect(output).toContain('line2');
 });
 
-it('throws if file-output is used without a resolver', async () => {
-  const { config, nodes } = parse('--- script ---\n>> out.txt\n');
-  await expect(compile(config, nodes)).rejects.toThrow('FileResolver');
+it('throws CompileError (FILE_RESOLVER_ERROR) when file-output fails in error mode', async () => {
+  const { config, nodes } = parse('--- script ---\n>> missing.txt\n');
+  await expect(compile(config, nodes)).rejects.toMatchObject({
+    name: 'CompileError',
+    code: 'FILE_RESOLVER_ERROR',
+    cause: { code: FileResolverErrorCode.AccessDenied },
+  });
+});
+
+it('skips file-output when onResolveError is skip', async () => {
+  const { config, nodes } = parse('--- script ---\n>> missing.txt\n');
+  const { events } = await compile(config, nodes, { onResolveError: 'skip', now: 0 });
+  // No output events except the trailing RESET
+  const outputEvents = events.filter(e => e.code === 'o' && e.data !== '\x1b[0m');
+  expect(outputEvents).toHaveLength(0);
+});
+
+it('emits warning event when onResolveError is warn', async () => {
+  const { config, nodes } = parse('--- script ---\n>> missing.txt\n');
+  const { events } = await compile(config, nodes, { onResolveError: 'warn', now: 0 });
+  const output = events.filter(e => e.code === 'o').map(e => e.data).join('');
+  expect(output).toContain('[warning:');
 });
 
 it('include uses the resolver', async () => {
   const resolver = (path: string) =>
-    path === 'other.castscript' ? '--- script ---\n$ echo included\n' : '';
+    path === 'other.castscript'
+      ? { ok: true as const, content: '--- script ---\n$ echo included\n' }
+      : { ok: false as const, code: FileResolverErrorCode.NotFound,
+          message: `not found: ${path}`, path };
+
   const { config, nodes } = parse('--- script ---\ninclude: other.castscript\n');
-  const { events } = await compile(config, nodes, resolver);
-  const allOutput = events.filter(e => e.code === 'o').map(e => e.data).join('');
-  expect(allOutput).toContain('echo included');
+  const { events } = await compile(config, nodes, { resolver, now: 0 });
+  const output = events.filter(e => e.code === 'o').map(e => e.data).join('');
+  expect(output).toContain('echo included');
+});
+
+it('now option controls the header timestamp', async () => {
+  const { config, nodes } = parse('--- script ---\n');
+  const cast = await compile(config, nodes, { now: 12345 });
+  expect(cast.header.timestamp).toBe(12345);
 });
 ```
 
-### 7.3 Browser smoke test (stretch goal)
+### 7.3 Golden tests — simplified by injectable `now`
 
-A Playwright or Puppeteer test that loads a minimal HTML page bundled with
-`@cast-builder/core` and verifies that `compile()` runs successfully in Chrome
-and Firefox with an in-memory resolver.
+Golden tests no longer need `stripTimestamp()` since `now: 0` can be passed
+to make the timestamp deterministic. Update golden test helpers:
+
+```typescript
+function compileExample(name: string): Promise<string> {
+  const src = readFileSync(`examples/${name}.castscript`, 'utf8');
+  const { config, nodes } = parse(src);
+  config.typingSeed = 42;
+  return compile(config, nodes, {
+    resolver: createNodeResolver(`examples/`),
+    now: 0,  // deterministic timestamp
+  }).then(encodeV3);
+}
+```
+
+### 7.4 Browser smoke test (stretch goal)
+
+A Playwright test that bundles `@cast-builder/core` into a minimal HTML page
+and verifies `compile()` runs in Chrome and Firefox with an in-memory resolver.
 
 ---
 
@@ -345,14 +597,52 @@ Estimated effort: **1–2 hours** — mostly mechanical `await` additions and mo
 
 ---
 
+## 8. Migration Steps
+
+1. Add `FileResolverErrorCode`, `FileResolverError`, `FileResolverSuccess`,
+   `FileResolverResult`, `FileResolver`, `CompileOptions`, `CompileError`
+   to `src/compiler/types.ts`
+2. Update `compile()` signature: `(config, nodes, sourceDir?)` →
+   `async (config, nodes, options?)`
+3. Update `compileNodes()` to accept and thread `options: CompileOptions`
+   instead of `sourceDir: string`
+4. Replace `readFileSync` calls with `await options.resolver(path)` +
+   discriminated union error handling
+5. Replace `dirname` / `resolve` (path manipulation) — removed entirely from core;
+   path resolution is now the resolver's responsibility
+6. Remove `import { readFileSync } from 'node:fs'`
+7. Remove `import { dirname, resolve } from 'node:path'`
+8. Remove `process.cwd()` default parameter
+9. Update `buildHeader()` to use `options.now ?? Math.floor(Date.now() / 1000)`
+10. Add `createNodeResolver` to `packages/cli/src/resolvers/node.ts`
+11. Update all CLI commands to pass `CompileOptions` with `createNodeResolver`
+12. Update all tests: `compile(config, nodes)` → `await compile(config, nodes, { now: 0 })`
+13. Add new resolver + error handling tests (§7.2)
+14. Update golden tests to use `now: 0` instead of `stripTimestamp()` hack
+15. Regenerate golden fixtures with `now: 0`
+16. Add `"browser": "./dist/index.js"` to `packages/core/package.json`
+17. Verify `tsc --noEmit` clean in both packages
+18. Verify `npm test --workspaces` all pass
+
+Estimated effort: **2–3 hours** — mostly mechanical `await` additions, options
+object threading, and moving `readFileSync` out of core into the CLI resolver.
+
+---
+
 ## 9. Summary
 
 | Dimension | Before | After |
 |---|---|---|
-| `compile()` signature | `(config, nodes, sourceDir?)` | `(config, nodes, resolver?)` |
+| `compile()` signature | `(config, nodes, sourceDir?)` | `async (config, nodes, options?)` |
 | `compile()` return type | `CompiledCast` | `Promise<CompiledCast>` |
+| File error handling | Throws untyped exception | Returns `FileResolverResult` discriminated union |
+| Error codes | None | `FileResolverErrorCode` enum (NotFound, ReadError, AccessDenied, UnsupportedPath) |
+| Resolve error behaviour | Always throws | Configurable: `'error'` \| `'warn'` \| `'skip'` |
+| Header timestamp | Always `Date.now()` | Injectable via `options.now` |
+| Path traversal protection | None | Resolver's responsibility; `AccessDenied` code available |
 | Node.js built-in imports in core | `node:fs`, `node:path` | **none** |
 | Browser-safe | ❌ | ✅ |
-| Deno/Bun/Workers compatible | Partial | ✅ |
-| Scripts without `>>` / `include:` | Works everywhere | Works everywhere (no resolver needed) |
-| Breaking change | — | Yes — `compile()` is now async |
+| Deno / Bun / Cloudflare Workers | Partial | ✅ |
+| Scripts without `>>` / `include:` | Works everywhere | Works everywhere (resolver never called) |
+| Golden test timestamp stripping | `stripTimestamp()` regex hack | Pass `now: 0` — no hack needed |
+| Breaking change | — | Yes — `compile()` is now `async` and takes options object |
