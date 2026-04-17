@@ -59,13 +59,14 @@ describe('compiler — events', () => {
     expect(clears.length).toBeGreaterThan(0);
   });
 
-  it('does not emit output events for hidden: directive', () => {
+  it('hidden: emits only a CRLF (Enter) with no character echo', () => {
     const { events } = compileScript(
       '--- config ---\ntyping-speed: instant\n--- script ---\nhidden: secret\n',
     );
-    // Only the trailing RESET should be emitted (no char events)
+    // Only the Enter (CRLF) and trailing RESET should be emitted — no character events
     const outputEvents = events.filter((e) => e.code === 'o' && e.data !== '\x1b[0m');
-    expect(outputEvents).toHaveLength(0);
+    expect(outputEvents).toHaveLength(1);
+    expect(outputEvents[0]?.data).toBe('\r\n');
   });
 
   it('events have monotonically increasing times', () => {

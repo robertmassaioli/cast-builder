@@ -1,4 +1,4 @@
-{"version":3,"term":{"cols":100,"rows":24},"title":"Styled Output Demo","timestamp":1776398243}
+{"version":3,"term":{"cols":100,"rows":24},"title":"Styled Output Demo","timestamp":1776400266}
 [0,"o","\u001b[1mBold text\u001b[0m\r\n"]
 [0,"o","\u001b[2mDimmed text\u001b[0m\r\n"]
 [0,"o","\u001b[3mItalic text\u001b[0m\r\n"]

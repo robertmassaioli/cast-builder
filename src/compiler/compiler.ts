@@ -116,10 +116,13 @@ function compileNodes(
       }
 
       case 'hidden': {
-        // Advance timing only — no output events (simulates non-echoing input)
+        // Advance timing for each character (no echo — nothing displayed)
         for (const _ch of node.text) {
           engine.typeChar();
         }
+        // Emit Enter keypress — moves to new line, as a real terminal would
+        engine.typeChar();
+        events.push({ time: engine.seconds, code: 'o', data: CRLF });
         break;
       }
 
