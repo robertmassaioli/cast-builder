@@ -40,8 +40,18 @@ export type {
   CastEventCode,
   CompiledCast,
   TypingProfile,
+  FileResolver,
+  FileResolverResult,
+  FileResolverSuccess,
+  FileResolverError,
+  CompileOptions,
 } from './compiler/types.js';
-export { TYPING_PROFILES } from './compiler/types.js';
+export {
+  TYPING_PROFILES,
+  FileResolverErrorCode,
+  NULL_RESOLVER,
+  CompileError,
+} from './compiler/types.js';
 
 // ── Utilities (useful for downstream tools like cast-edit) ────────────────────
 export { stripAllEscapes, ScreenBuffer } from './util/terminal.js';

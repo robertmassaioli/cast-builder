@@ -1,32 +1,55 @@
 /**
  * Compiler — converts a ParseResult into a CompiledCast.
- * Phase 1: full implementation of all directives including file-output,
- * include/blocks, full set key support, and styled prompt rendering.
+ *
+ * Browser-safe: zero Node.js built-in imports. All I/O is delegated to the
+ * caller-supplied FileResolver in CompileOptions.
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import { CLEAR_SCREEN, CRLF, RESET, modifiersToAnsi } from '../util/ansi.js';
 import { TimingEngine } from './timing.js';
-import type { CastEvent, CastHeader, CompiledCast } from './types.js';
+import {
+  CompileError,
+  FileResolverErrorCode,
+  NULL_RESOLVER,
+  type CastEvent,
+  type CastHeader,
+  type CompiledCast,
+  type CompileOptions,
+  type FileResolverError,
+} from './types.js';
 import { parse, parseStyledText } from '../parser/parser.js';
 import type { Config, ScriptNode, StyledText } from '../parser/types.js';
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function compile(
+/**
+ * Compile a parsed .castscript into a CompiledCast (header + event stream).
+ *
+ * @param config   Parsed configuration (from parse())
+ * @param nodes    Parsed script nodes (from parse())
+ * @param options  Optional: FileResolver, injectable timestamp (now), error handling
+ *
+ * @returns Promise<CompiledCast> — async because the FileResolver may be async
+ *          (e.g. fetch-based in browsers). Scripts with no `>>` or `include:`
+ *          directives resolve immediately.
+ */
+export async function compile(
   config: Config,
   nodes: ScriptNode[],
-  sourceDir: string = process.cwd(),
-): CompiledCast {
-  const header = buildHeader(config);
+  options: CompileOptions = {},
+): Promise<CompiledCast> {
+  const resolver = options.resolver ?? NULL_RESOLVER;
+  const onResolveError = options.onResolveError ?? 'error';
+  const timestamp = options.now ?? Math.floor(Date.now() / 1000);
+
+  const header = buildHeader(config, timestamp);
   const events: CastEvent[] = [];
   const engine = new TimingEngine(config.typingSpeed, config.typingSeed);
 
   // Mutable compile-time config (mid-script `set` directives mutate this copy)
   const liveConfig: Config = { ...config, env: { ...config.env } };
 
-  compileNodes(nodes, events, engine, liveConfig, sourceDir);
+  await compileNodes(nodes, events, engine, liveConfig, resolver, onResolveError);
 
   // Emit reset at end to restore terminal state
   events.push({ time: engine.seconds, code: 'o', data: RESET });
@@ -36,14 +59,15 @@ export function compile(
 
 // ── Internal node compiler ────────────────────────────────────────────────────
 
-function compileNodes(
+async function compileNodes(
   nodes: ScriptNode[],
   events: CastEvent[],
   engine: TimingEngine,
   config: Config,
-  sourceDir: string,
+  resolver: NonNullable<CompileOptions['resolver']>,
+  onResolveError: NonNullable<CompileOptions['onResolveError']>,
   isFirstBlock = { value: true },
-): void {
+): Promise<void> {
   for (const node of nodes) {
     switch (node.kind) {
       case 'comment':
@@ -127,15 +151,13 @@ function compileNodes(
       }
 
       case 'file-output': {
-        // Read the file relative to the source script's directory
-        const filePath = resolve(sourceDir, node.path);
-        let fileContent: string;
-        try {
-          fileContent = readFileSync(filePath, 'utf8');
-        } catch {
-          throw new Error(`file-output: cannot read file "${filePath}"`);
+        const result = await resolver(node.path);
+        if (!result.ok) {
+          const handled = await handleResolveError(result, events, engine, onResolveError);
+          if (!handled) break;
+          continue;
         }
-        const lines = fileContent.split('\n');
+        const lines = result.content.split('\n');
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
           // Skip trailing empty line from final newline
@@ -147,31 +169,26 @@ function compileNodes(
       }
 
       case 'include': {
-        // Resolve path relative to current source directory
-        const includePath = resolve(sourceDir, node.path);
-        let includeSource: string;
-        try {
-          includeSource = readFileSync(includePath, 'utf8');
-        } catch {
-          throw new Error(`include: cannot read file "${includePath}"`);
+        const result = await resolver(node.path);
+        if (!result.ok) {
+          await handleResolveError(result, events, engine, onResolveError);
+          break;
         }
-        const includeDir = dirname(includePath);
-        const { nodes: includeNodes } = parse(includeSource);
+        const { nodes: includeNodes } = parse(result.content);
 
         let nodesToCompile: ScriptNode[];
         if (node.block) {
           nodesToCompile = extractBlock(includeNodes, node.block);
         } else {
-          // Filter out block-label nodes when including the whole file
           nodesToCompile = includeNodes.filter((n) => n.kind !== 'block-label');
         }
 
-        compileNodes(nodesToCompile, events, engine, config, includeDir, isFirstBlock);
+        // Pass the same resolver — it is responsible for path resolution
+        await compileNodes(nodesToCompile, events, engine, config, resolver, onResolveError, isFirstBlock);
         break;
       }
 
       case 'set': {
-        // Apply mid-script config key overrides
         switch (node.key) {
           case 'typing-speed': {
             const speed =
@@ -194,7 +211,6 @@ function compileNodes(
           case 'title':
             config.title = node.value;
             break;
-          // Other keys (width, height, etc.) are not meaningful mid-script
           default:
             break;
         }
@@ -204,13 +220,40 @@ function compileNodes(
   }
 }
 
-// ── Block extraction ──────────────────────────────────────────────────────────
+// ── Resolve error handler ─────────────────────────────────────────────────────
 
 /**
- * Extract nodes belonging to a named [block] from a node list.
- * Returns the nodes between the named block-label and the next block-label
- * (or end of file).
+ * Handle a FileResolverError according to onResolveError policy.
+ * Returns false if the caller should `break` (skip), true if it should `continue`.
+ * Throws CompileError for 'error' policy.
  */
+async function handleResolveError(
+  error: FileResolverError,
+  events: CastEvent[],
+  engine: TimingEngine,
+  policy: NonNullable<CompileOptions['onResolveError']>,
+): Promise<boolean> {
+  switch (policy) {
+    case 'skip':
+      return false;
+    case 'warn':
+      events.push({
+        time: engine.seconds,
+        code: 'o',
+        data: `[warning: could not read "${error.path}": ${error.message} (${error.code})]\r\n`,
+      });
+      return false;
+    default: // 'error'
+      throw new CompileError(
+        'FILE_RESOLVER_ERROR',
+        `${error.code}: ${error.message}`,
+        error,
+      );
+  }
+}
+
+// ── Block extraction ──────────────────────────────────────────────────────────
+
 function extractBlock(nodes: ScriptNode[], blockName: string): ScriptNode[] {
   let inBlock = false;
   const result: ScriptNode[] = [];
@@ -220,18 +263,15 @@ function extractBlock(nodes: ScriptNode[], blockName: string): ScriptNode[] {
       if (node.name === blockName) {
         inBlock = true;
       } else if (inBlock) {
-        // Hit the next block label — stop
         break;
       }
       continue;
     }
-    if (inBlock) {
-      result.push(node);
-    }
+    if (inBlock) result.push(node);
   }
 
   if (!inBlock) {
-    throw new Error(`include: block "[${blockName}]" not found`);
+    throw new CompileError('INVALID_DIRECTIVE', `include: block "[${blockName}]" not found`);
   }
 
   return result;
@@ -239,12 +279,12 @@ function extractBlock(nodes: ScriptNode[], blockName: string): ScriptNode[] {
 
 // ── Header builder ────────────────────────────────────────────────────────────
 
-function buildHeader(config: Config): CastHeader {
+function buildHeader(config: Config, timestamp: number): CastHeader {
   const header: CastHeader = {
     version: config.outputFormat === 'v2' ? 2 : 3,
     cols: config.width,
     rows: config.height,
-    timestamp: Math.floor(Date.now() / 1000),
+    timestamp,
   };
 
   if (config.title) header.title = config.title;
@@ -273,10 +313,6 @@ export function renderStyledText(text: StyledText): string {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Unescape common escape sequences in raw: directive strings.
- * e.g. "\\x1b[1m" → "\x1b[1m"
- */
 function unescapeRaw(input: string): string {
   return input
     .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
