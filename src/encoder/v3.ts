@@ -28,17 +28,23 @@ export function encodeV3(cast: CompiledCast): string {
 }
 
 function serializeHeader(header: CastHeader, version: 2 | 3): string {
+  // v3 nests dimensions and theme inside a "term" object
+  const term: Record<string, unknown> = {
+    cols: header.cols,
+    rows: header.rows,
+  };
+
+  if (header.theme !== undefined) term['theme'] = header.theme;
+
   const obj: Record<string, unknown> = {
     version,
-    width: header.cols,
-    height: header.rows,
+    term,
   };
 
   if (header.title !== undefined) obj['title'] = header.title;
   if (header.timestamp !== undefined) obj['timestamp'] = header.timestamp;
   if (header.idleTimeLimit !== undefined) obj['idle_time_limit'] = header.idleTimeLimit;
   if (header.env !== undefined) obj['env'] = header.env;
-  if (header.theme !== undefined) obj['theme'] = header.theme;
 
   return JSON.stringify(obj);
 }

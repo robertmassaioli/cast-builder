@@ -16,12 +16,14 @@ describe('encodeV3', () => {
     }
   });
 
-  it('first line is the header with correct version', () => {
+  it('first line is the header with correct version and term object', () => {
     const output = encodeV3(minimal);
     const header = JSON.parse(output.split('\n')[0] ?? '{}') as Record<string, unknown>;
     expect(header['version']).toBe(3);
-    expect(header['width']).toBe(80);
-    expect(header['height']).toBe(24);
+    // v3 nests dimensions inside "term"
+    const term = header['term'] as Record<string, unknown>;
+    expect(term['cols']).toBe(80);
+    expect(term['rows']).toBe(24);
   });
 
   it('converts absolute times to deltas', () => {
@@ -52,6 +54,8 @@ describe('encodeV3', () => {
     const header = JSON.parse(encodeV3(cast).split('\n')[0] ?? '{}') as Record<string, unknown>;
     expect(header['title']).toBe('Test');
     expect(header['timestamp']).toBe(1000);
+    // term object should still be present
+    expect(header['term']).toBeDefined();
   });
 
   it('ends with a trailing newline', () => {

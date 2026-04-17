@@ -1,4 +1,4 @@
-{"version":3,"width":80,"height":24,"title":"Interactive Prompts Demo","timestamp":1776394840}
+{"version":3,"term":{"cols":80,"rows":24},"title":"Interactive Prompts Demo","timestamp":1776398243}
 [0,"m","Login"]
 [0,"o","user@host:~$ "]
 [0.088,"o","s"]
