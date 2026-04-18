@@ -148,7 +148,7 @@ Add a comment in the encoder explaining the chosen precision and why.
 
 ---
 
-## 6. 🧪 Add a `CONTRIBUTING.md` and `CHANGELOG.md`
+## 6. 🧪 Add a `CONTRIBUTING.md` and `CHANGELOG.md` (DO LATER)
 
 **Category:** Documentation / DX  
 **Location:** Repository root (`cast-builder/`)
@@ -280,7 +280,7 @@ Document this in the CLI README alongside the other compile flags.
 | 3 | ✅ ~~Include recursion depth limit~~ | Small | High |
 | 4 | ~~📌 Pin GitHub Actions to commit SHAs~~ (WON'T DO) | Small | Medium |
 | 5 | ~~⚡ Floating-point precision in v3 encoder~~ (WON'T DO) | Medium | Low–Medium |
-| 6 | 📝 CONTRIBUTING.md + CHANGELOG.md | Medium | High |
+| 6 | 📝 CONTRIBUTING.md + CHANGELOG.md (DO LATER) | Medium | High |
 | 7 | ✅ ~~Remove stale phase comments~~ | Tiny | Low |
 | 8 | ✅ ~~Missing examples for raw/set/block include~~ | Small | Medium |
 | 9 | ~~🏗️ `prepublishOnly` build guard~~ (WON'T DO) | Tiny | Medium |
