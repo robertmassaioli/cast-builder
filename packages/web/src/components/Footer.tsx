@@ -10,6 +10,8 @@ interface FooterProps {
   showSaved: boolean;
   onToggleSaved: () => void;
   onLoad: (src: string) => void;
+  shareState: 'idle' | 'copied' | 'too-large';
+  onShare: () => void;
 }
 
 export function Footer({
@@ -20,6 +22,8 @@ export function Footer({
   showSaved,
   onToggleSaved,
   onLoad,
+  shareState,
+  onShare,
 }: FooterProps) {
   return (
     <footer class={s.footer}>
@@ -30,6 +34,8 @@ export function Footer({
         source={source}
         showSaved={showSaved}
         onSave={onToggleSaved}
+        shareState={shareState}
+        onShare={onShare}
       />
       {showSaved && (
         <div class={s.savedPanel}>

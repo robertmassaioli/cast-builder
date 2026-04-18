@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { Editor } from './components/Editor.js';
 import { Player } from './components/Player.js';
 import { Footer } from './components/Footer.js';
+import { ShareBanner } from './components/ShareBanner.js';
 import { ExamplesMenu } from './components/ExamplesMenu.js';
 import { compileScript, debounce, type CompileResult } from './compiler/compile.js';
 import {
@@ -13,6 +14,13 @@ import {
   setPlayerSpeed,
   type Theme,
 } from './storage/localStorage.js';
+import {
+  buildShareUrl,
+  extractSharedScript,
+  clearShareParam,
+  detectExternalDependencies,
+  copyToClipboard,
+} from './share/shareLink.js';
 import { darkTheme, lightTheme } from './theme.css.js';
 import * as s from './App.css.js';
 
@@ -25,6 +33,8 @@ type CompileState =
   | ({ status: 'ok' } & Extract<CompileResult, { ok: true }>)
   | ({ status: 'error' } & Extract<CompileResult, { ok: false }>);
 
+type ShareState = 'idle' | 'copied' | 'too-large';
+
 export function App() {
   const [source, setSource] = useState(() => getCurrentScript());
   const [compileState, setCompileState] = useState<CompileState>({ status: 'idle' });
@@ -32,8 +42,26 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(() => getTheme());
   const [speed, setSpeed] = useState<number>(() => getPlayerSpeed());
   const [splitPct, setSplitPct] = useState(50);
+  const [shareState, setShareState] = useState<ShareState>('idle');
   const dragging = useRef(false);
   const mainRef = useRef<HTMLDivElement>(null);
+
+  // ── Share link: check for ?s= on mount ──────────────────────────────────────
+  const [sharedScript] = useState(() => extractSharedScript());
+  const [showBanner, setShowBanner] = useState(() => {
+    if (!sharedScript) return false;
+    // If this is a first visit (no saved script), load silently
+    if (!getCurrentScript()) return false;
+    return true;
+  });
+
+  // First visit with a share link — load silently without a banner
+  useEffect(() => {
+    if (sharedScript && !getCurrentScript()) {
+      setSource(sharedScript);
+      clearShareParam();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply theme class to body
   useEffect(() => {
@@ -59,6 +87,8 @@ export function App() {
   useEffect(() => {
     setCurrentScript(source);
     doCompile(source);
+    // Reset share state when script changes
+    setShareState('idle');
   }, [source, doCompile]);
 
   // Ctrl/Cmd+Enter — immediate compile
@@ -67,11 +97,8 @@ export function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         compileScript(source).then((r) => {
-          if (r.ok) {
-            setCompileState({ status: 'ok', ...r });
-          } else {
-            setCompileState({ status: 'error', ...r });
-          }
+          if (r.ok) setCompileState({ status: 'ok', ...r });
+          else setCompileState({ status: 'error', ...r });
         });
       }
     },
@@ -102,6 +129,31 @@ export function App() {
     };
   }, []);
 
+  // ── Share handler ────────────────────────────────────────────────────────────
+  const handleShare = useCallback(async () => {
+    const result = buildShareUrl(source);
+    if (!result.ok) {
+      setShareState('too-large');
+      return;
+    }
+    await copyToClipboard(result.url);
+    setShareState('copied');
+    setTimeout(() => setShareState('idle'), 2000);
+  }, [source]);
+
+  // ── Banner handlers ──────────────────────────────────────────────────────────
+  const handleBannerAccept = useCallback((script: string) => {
+    setSource(script);
+    setShowBanner(false);
+    clearShareParam();
+  }, []);
+
+  const handleBannerDismiss = useCallback(() => {
+    setShowBanner(false);
+    clearShareParam();
+  }, []);
+
+  // ── Derived state ────────────────────────────────────────────────────────────
   const castContent = compileState.status === 'ok' ? compileState.cast : null;
 
   const statusText =
@@ -117,6 +169,8 @@ export function App() {
     compileState.status === 'ok' ? 'ok'
     : compileState.status === 'error' ? 'error'
     : 'neutral';
+
+  const missingDeps = sharedScript ? detectExternalDependencies(sharedScript) : [];
 
   return (
     <div class={s.appRoot}>
@@ -147,9 +201,18 @@ export function App() {
         </div>
       </header>
 
+      {/* Share banner — shown when a ?s= link is opened by a returning user */}
+      {showBanner && sharedScript && (
+        <ShareBanner
+          sharedScript={sharedScript}
+          missingDeps={missingDeps}
+          onAccept={handleBannerAccept}
+          onDismiss={handleBannerDismiss}
+        />
+      )}
+
       {/* Main panels */}
       <main class={s.appMain} ref={mainRef}>
-        {/* Editor panel */}
         <div
           class={s.panel}
           style={{ flexBasis: `${splitPct}%`, flexShrink: 0, flexGrow: 0 }}
@@ -167,10 +230,8 @@ export function App() {
           </div>
         </div>
 
-        {/* Resize handle */}
         <div class={s.resizeHandle} onMouseDown={onMouseDown} />
 
-        {/* Player panel */}
         <div class={s.panel} style={{ flex: 1, minWidth: 0 }}>
           <div class={s.panelLabel}>
             <span>▶ Preview</span>
@@ -192,7 +253,7 @@ export function App() {
         </div>
       </main>
 
-      {/* Footer: status bar + saved scripts panel */}
+      {/* Footer: status bar + saved scripts */}
       <Footer
         state={statusState}
         text={statusText}
@@ -201,6 +262,8 @@ export function App() {
         showSaved={showSaved}
         onToggleSaved={() => setShowSaved((v) => !v)}
         onLoad={setSource}
+        shareState={shareState}
+        onShare={handleShare}
       />
     </div>
   );
