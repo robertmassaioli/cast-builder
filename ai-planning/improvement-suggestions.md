@@ -216,7 +216,7 @@ with inline comments explaining each directive.
 
 ---
 
-## 9. 🏗️ Add a `prepublishOnly` Script to Prevent Publishing Stale Builds
+## 9. ~~🏗️ Add a `prepublishOnly` Script to Prevent Publishing Stale Builds~~ (WON'T DO)
 
 **Category:** Developer Experience / Correctness  
 **Files:** `packages/core/package.json`, `packages/cli/package.json`
@@ -283,5 +283,5 @@ Document this in the CLI README alongside the other compile flags.
 | 6 | 📝 CONTRIBUTING.md + CHANGELOG.md | Medium | High |
 | 7 | ✅ ~~Remove stale phase comments~~ | Tiny | Low |
 | 8 | ✅ ~~Missing examples for raw/set/block include~~ | Small | Medium |
-| 9 | 🏗️ `prepublishOnly` build guard | Tiny | Medium |
+| 9 | ~~🏗️ `prepublishOnly` build guard~~ (WON'T DO) | Tiny | Medium |
 | 10 | ✅ ~~`--on-resolve-error` CLI flag~~ | Small | Medium |
