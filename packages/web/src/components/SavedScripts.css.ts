@@ -1,13 +1,10 @@
 import { style } from '@vanilla-extract/css';
 import { vars } from '../theme.css.js';
 
+// The outer panel container (background, padding, scroll) is now owned by
+// Footer.css.ts — SavedScripts only styles its inner content.
 export const container = style({
-  background: vars.color.bgPanel,
-  borderTop: `1px solid ${vars.color.border}`,
-  padding: `${vars.space.sm} ${vars.space.lg}`,
-  flexShrink: 0,
-  maxHeight: '160px',
-  overflowY: 'auto',
+  // inner content wrapper — no fixed height or border here
 });
 
 export const saveRow = style({

@@ -1,6 +1,15 @@
 import { style } from '@vanilla-extract/css';
 import { vars } from './theme.css.js';
 
+// ── App root — the outermost div that must fill #app ─────────────────────────
+
+export const appRoot = style({
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100dvh',
+  overflow: 'hidden',
+});
+
 // ── Header ────────────────────────────────────────────────────────────────────
 
 export const header = style({

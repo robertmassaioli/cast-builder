@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { Editor } from './components/Editor.js';
 import { Player } from './components/Player.js';
-import { StatusBar } from './components/StatusBar.js';
-import { SavedScripts } from './components/SavedScripts.js';
+import { Footer } from './components/Footer.js';
 import { ExamplesMenu } from './components/ExamplesMenu.js';
 import { compileScript, debounce, type CompileResult } from './compiler/compile.js';
 import {
@@ -120,7 +119,7 @@ export function App() {
     : 'neutral';
 
   return (
-    <div>
+    <div class={s.appRoot}>
       {/* Header */}
       <header class={s.header}>
         <div class={s.appTitle}>
@@ -193,19 +192,16 @@ export function App() {
         </div>
       </main>
 
-      {/* Status bar */}
-      <StatusBar
+      {/* Footer: status bar + saved scripts panel */}
+      <Footer
         state={statusState}
         text={statusText}
         castContent={castContent}
         source={source}
-        onSave={() => setShowSaved((v) => !v)}
+        showSaved={showSaved}
+        onToggleSaved={() => setShowSaved((v) => !v)}
+        onLoad={setSource}
       />
-
-      {/* Saved scripts panel */}
-      {showSaved && (
-        <SavedScripts currentSource={source} onLoad={setSource} />
-      )}
     </div>
   );
 }
