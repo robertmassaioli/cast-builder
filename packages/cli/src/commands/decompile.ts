@@ -143,18 +143,44 @@ export function registerDecompile(program: Command): void {
         process.exit(1);
       }
 
-      const header = JSON.parse(lines[0] ?? '{}') as CastHeaderRaw;
+      // Parse header — wrap in try-catch so malformed files give a clean error
+      let header: CastHeaderRaw;
+      try {
+        header = JSON.parse(lines[0] ?? '{}') as CastHeaderRaw;
+      } catch {
+        console.error('Error: invalid cast file — header line is not valid JSON.');
+        process.exit(1);
+      }
+
+      if (header.version !== 2 && header.version !== 3) {
+        console.error(
+          `Error: unsupported cast version "${String(header.version)}". Expected 2 or 3.`,
+        );
+        process.exit(1);
+      }
+
       const isV3 = header.version === 3;
 
       // Resolve terminal dimensions (v2: width/height, v3: term.cols/term.rows)
       const cols = header.term?.cols ?? header.width ?? 120;
       const rows = header.term?.rows ?? header.height ?? 30;
 
-      // Parse events, converting v3 deltas → absolute times
+      // Parse events, converting v3 deltas → absolute times.
+      // Skip any event lines that fail to parse — warn but continue.
       let clock = 0;
       const events: Array<{ time: number; code: string; data: string }> = [];
       for (let i = 1; i < lines.length; i++) {
-        const ev = JSON.parse(lines[i] ?? '[]') as CastEventRaw;
+        let ev: CastEventRaw;
+        try {
+          ev = JSON.parse(lines[i] ?? '[]') as CastEventRaw;
+        } catch {
+          console.warn(`Warning: skipping malformed event on line ${i + 1}.`);
+          continue;
+        }
+        if (!Array.isArray(ev) || ev.length < 3) {
+          console.warn(`Warning: skipping invalid event on line ${i + 1} (expected [time, code, data]).`);
+          continue;
+        }
         const [dt, code, data] = ev;
         clock = isV3 ? clock + (dt ?? 0) : (dt ?? 0);
         events.push({ time: clock, code: code ?? 'o', data: data ?? '' });

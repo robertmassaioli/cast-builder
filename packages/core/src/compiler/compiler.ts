@@ -59,6 +59,8 @@ export async function compile(
 
 // ── Internal node compiler ────────────────────────────────────────────────────
 
+const MAX_INCLUDE_DEPTH = 16;
+
 async function compileNodes(
   nodes: ScriptNode[],
   events: CastEvent[],
@@ -67,7 +69,14 @@ async function compileNodes(
   resolver: NonNullable<CompileOptions['resolver']>,
   onResolveError: NonNullable<CompileOptions['onResolveError']>,
   isFirstBlock = { value: true },
+  depth = 0,
 ): Promise<void> {
+  if (depth > MAX_INCLUDE_DEPTH) {
+    throw new CompileError(
+      'INCLUDE_DEPTH_EXCEEDED',
+      `Maximum include depth (${MAX_INCLUDE_DEPTH}) exceeded — possible circular include.`,
+    );
+  }
   for (const node of nodes) {
     switch (node.kind) {
       case 'comment':
@@ -184,7 +193,7 @@ async function compileNodes(
         }
 
         // Pass the same resolver — it is responsible for path resolution
-        await compileNodes(nodesToCompile, events, engine, config, resolver, onResolveError, isFirstBlock);
+        await compileNodes(nodesToCompile, events, engine, config, resolver, onResolveError, isFirstBlock, depth + 1);
         break;
       }
 

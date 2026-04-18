@@ -5,7 +5,7 @@ documentation, and developer experience. Ordered roughly by impact.
 
 ---
 
-## 1. 🔒 Fix Path Traversal in the Node.js FileResolver
+## 1. ✅ ~~Fix Path Traversal in the Node.js FileResolver~~ (DONE)
 
 **Category:** Security  
 **File:** `packages/cli/src/resolvers/node.ts`
@@ -37,7 +37,7 @@ untrusted sources.
 
 ---
 
-## 2. 🔒 Wrap JSON.parse in try-catch in the Decompile Command
+## 2. ✅ ~~Wrap JSON.parse in try-catch in the Decompile Command~~ (DONE)
 
 **Category:** Security / Robustness  
 **File:** `packages/cli/src/commands/decompile.ts` (lines where events and header are parsed)
@@ -275,9 +275,9 @@ Document this in the CLI README alongside the other compile flags.
 
 | # | Category | Effort | Impact |
 |---|---|---|---|
-| 1 | 🔒 Path traversal in node resolver | Small | High |
-| 2 | 🔒 JSON.parse error handling in decompile | Small | Medium |
-| 3 | 🔒 Include recursion depth limit | Small | High |
+| 1 | ✅ ~~Path traversal in node resolver~~ | Small | High |
+| 2 | ✅ ~~JSON.parse error handling in decompile~~ | Small | Medium |
+| 3 | ✅ ~~Include recursion depth limit~~ | Small | High |
 | 4 | 📌 Pin GitHub Actions to commit SHAs | Small | Medium |
 | 5 | ⚡ Floating-point precision in v3 encoder | Medium | Low–Medium |
 | 6 | 📝 CONTRIBUTING.md + CHANGELOG.md | Medium | High |
