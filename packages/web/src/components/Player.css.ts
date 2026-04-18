@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { style, globalStyle } from '@vanilla-extract/css';
 import { vars } from '../theme.css.js';
 
 export const placeholder = style({
@@ -23,10 +23,18 @@ export const placeholderIcon = style({
 });
 
 export const placeholderText = style({
+  color: vars.color.textMuted,
   fontSize: '13px',
   marginTop: vars.space.xs,
 });
 
 export const playerContainer = style({
+  width: '100%',
+  height: '100%',
+});
+
+// asciinema-player renders into a shadow DOM but the outer wrapper needs
+// to fill the available space so `fit: 'width'` works correctly
+globalStyle(`${playerContainer} .ap-wrapper`, {
   width: '100%',
 });

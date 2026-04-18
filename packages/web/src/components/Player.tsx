@@ -1,9 +1,6 @@
 import { useEffect, useRef } from 'preact/hooks';
+import 'asciinema-player/dist/bundle/asciinema-player.css';
 import * as s from './Player.css.js';
-
-// asciinema-player ships CJS + ESM; import the create function
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const AsciinemaPlayer: any;
 
 interface PlayerProps {
   castContent: string | null;
