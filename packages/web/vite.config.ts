@@ -18,6 +18,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split heavy dependencies into separate chunks for better caching
+          'codemirror': ['codemirror', '@codemirror/state', '@codemirror/view',
+                         '@codemirror/language', '@codemirror/autocomplete',
+                         '@codemirror/commands', '@lezer/highlight'],
+          'player': ['asciinema-player'],
+          'core': ['@cast-builder/core'],
+        },
+      },
+    },
   },
   optimizeDeps: {
     include: ['asciinema-player'],
