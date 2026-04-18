@@ -1,0 +1,91 @@
+--- config ---
+title:        Advanced Directives Demo
+width:        100
+height:       28
+prompt:       user@host:~/project$ 
+typing-speed: normal
+idle-time:    0.8
+
+--- script ---
+
+# ── 1. raw: — emit raw ANSI escape sequences verbatim ─────────────────────────
+#
+# Use raw: when you need precise control over terminal output that the
+# inline style tag system doesn't cover — e.g. blinking text, reverse
+# video, 256-colour codes, or complex cursor positioning sequences.
+
+marker: Raw ANSI
+
+print: {bold: 1. raw: directive — verbatim ANSI escape sequences}
+
+# Bold + underline via raw SGR codes
+raw: \x1b[1;4mThis text is bold and underlined via raw:\x1b[0m\r\n
+
+# 256-colour foreground (colour index 208 = orange)
+raw: \x1b[38;5;208mThis is 256-colour orange via raw:\x1b[0m\r\n
+
+# Blinking text (not supported by {blink:} style tag)
+raw: \x1b[5mBlinking text via raw:\x1b[0m\r\n
+
+wait: 1s
+
+# ── 2. set: — override config values mid-script ───────────────────────────────
+#
+# set: changes a config value for all subsequent directives.
+# Supported keys: typing-speed, prompt, idle-time, title
+#
+# This is useful for varying the pace of a demo — slow down for important
+# steps, speed up for boilerplate.
+
+marker: Mid-script Config Override
+
+print: {bold: 2. set: directive — override config mid-script}
+
+$ echo "Normal typing speed"
+> normal speed output
+
+set typing-speed: instant
+
+$ echo "Now typing is instant"
+> instant speed output
+
+set typing-speed: slow
+
+$ echo "Now typing is slow and deliberate"
+> slow speed output
+
+set typing-speed: normal
+
+wait: 500ms
+
+# Change the prompt mid-script (useful for simulating sudo or SSH)
+set prompt: root@server:~# 
+
+$ whoami
+> root
+
+set prompt: user@host:~/project$ 
+
+$ echo "Back to normal prompt"
+> Back to normal prompt
+
+wait: 1s
+
+# ── 3. include: file#block — include a named block from another file ──────────
+#
+# include: without a block name inlines the entire file.
+# include: file#block-name inlines only the named [block] section.
+#
+# This enables modular scripts: shared setup sequences, reusable login steps,
+# common output fixtures etc. — defined once, included anywhere.
+
+marker: Named Block Include
+
+print: {bold: 3. include: file#block — selective include}
+
+# Include only the [verify] block from modular/login.castscript
+# (which defines [login] and [verify] as separate named blocks)
+include: modular/login.castscript#login
+
+$ echo "Continued after included block"
+> Continued after included block

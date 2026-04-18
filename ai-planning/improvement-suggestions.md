@@ -196,7 +196,7 @@ know the project history — they suggest the code is unfinished.
 
 ---
 
-## 8. 🧪 Add Missing Example Scripts for Under-Documented Directives
+## 8. ✅ ~~Add Missing Example Scripts for Under-Documented Directives~~ (DONE)
 
 **Category:** Documentation / DX  
 **Location:** `packages/core/examples/`
@@ -282,6 +282,6 @@ Document this in the CLI README alongside the other compile flags.
 | 5 | ~~⚡ Floating-point precision in v3 encoder~~ (WON'T DO) | Medium | Low–Medium |
 | 6 | 📝 CONTRIBUTING.md + CHANGELOG.md | Medium | High |
 | 7 | ✅ ~~Remove stale phase comments~~ | Tiny | Low |
-| 8 | 🧪 Missing examples for raw/set/block include | Small | Medium |
+| 8 | ✅ ~~Missing examples for raw/set/block include~~ | Small | Medium |
 | 9 | 🏗️ `prepublishOnly` build guard | Tiny | Medium |
 | 10 | 🏗️ `--on-resolve-error` CLI flag | Small | Medium |
