@@ -49,7 +49,7 @@ cast-builder/
 | Build tool | **Vite** | Zero-config, fast HMR, excellent ESM/TypeScript support, built-in GitHub Pages deploy |
 | UI framework | **Preact** | Tiny (3kB), React-compatible API, ideal for a focused tool with no heavy UI needs |
 | Editor component | **CodeMirror 6** | Best-in-class browser editor; supports custom syntax highlighting, line numbers, auto-complete |
-| Player | **asciinema-player** | Official JS player; already bundled in `Asciinema-for-Confluence/static/player-assets/` |
+| Player | **asciinema-player** | Official JS player; already used as an npm dependency (`^3.9.0`) in the Forge app — same package, same version |
 | Styling | **CSS custom properties** (no framework) | Keeps bundle small; matches the terminal aesthetic |
 | State persistence | **`localStorage`** | Keep it all in the frontend; no auth, no server |
 
@@ -324,7 +324,7 @@ cast-builder/packages/web/
     "@codemirror/state":  "^6.0.0",
     "@codemirror/language": "^6.0.0",
     "@codemirror/autocomplete": "^6.0.0",
-    "asciinema-player":   "^3.0.0"
+    "asciinema-player":   "^3.9.0"
   },
   "devDependencies": {
     "typescript":  "^5.4.0",
