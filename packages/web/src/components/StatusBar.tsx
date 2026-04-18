@@ -5,10 +5,11 @@ interface StatusBarProps {
   text: string;
   castContent: string | null;
   source: string;
+  showSaved: boolean;
   onSave: () => void;
 }
 
-export function StatusBar({ state, text, castContent, source, onSave }: StatusBarProps) {
+export function StatusBar({ state, text, castContent, source, showSaved, onSave }: StatusBarProps) {
   const stateClass = state === 'ok' ? s.statusOk : state === 'error' ? s.statusError : s.statusNeutral;
 
   const download = () => {
@@ -43,7 +44,9 @@ export function StatusBar({ state, text, castContent, source, onSave }: StatusBa
         <button onClick={downloadScript} title="Download .castscript">⬇ Script</button>
         <button onClick={download} disabled={!castContent} title="Download .cast file">⬇ .cast</button>
         <button onClick={copy} disabled={!castContent} title="Copy .cast to clipboard">📋 Copy</button>
-        <button onClick={onSave} title="Manage saved scripts">💾 Saved</button>
+        <button onClick={onSave} title={showSaved ? 'Hide saved scripts' : 'Manage saved scripts'}>
+          💾 {showSaved ? 'Hide Saved' : 'Saved Scripts'}
+        </button>
       </div>
     </div>
   );

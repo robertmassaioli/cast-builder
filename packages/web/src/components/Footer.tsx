@@ -28,6 +28,7 @@ export function Footer({
         text={text}
         castContent={castContent}
         source={source}
+        showSaved={showSaved}
         onSave={onToggleSaved}
       />
       {showSaved && (
