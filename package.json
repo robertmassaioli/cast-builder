@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "packages/core",
-    "packages/cli"
+    "packages/cli",
+    "packages/web"
   ],
   "scripts": {
     "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/cli",
