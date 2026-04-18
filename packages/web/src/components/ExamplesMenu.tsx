@@ -31,7 +31,7 @@ export function ExamplesMenu({ onSelect }: ExamplesMenuProps) {
             <button
               key={ex.name}
               class={s.item}
-              onClick={() => { onSelect(ex.content); setOpen(false); }}
+              onClick={() => { onSelect(ex.script); setOpen(false); }}
             >
               <span class={s.itemName}>{ex.name}</span>
               <span class={s.itemDesc}>{ex.description}</span>
