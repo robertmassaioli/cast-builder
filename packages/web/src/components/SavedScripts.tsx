@@ -1,83 +1,75 @@
-/**
- * Saved script slots panel.
- */
 import { useState } from 'preact/hooks';
 import {
   getSavedScripts,
   saveScript,
   deleteSavedScript,
   renameSavedScript,
-  type SavedScript,
 } from '../storage/localStorage.js';
+import * as s from './SavedScripts.css.js';
 
 interface SavedScriptsProps {
-  currentScript: string;
-  onLoad: (script: string) => void;
+  currentSource: string;
+  onLoad: (src: string) => void;
 }
 
-export function SavedScripts({ currentScript, onLoad }: SavedScriptsProps) {
-  const [saved, setSaved] = useState<SavedScript[]>(() => getSavedScripts());
-  const [newName, setNewName] = useState('');
+export function SavedScripts({ currentSource, onLoad }: SavedScriptsProps) {
+  const [slots, setSlots] = useState(() => getSavedScripts());
+  const [name, setName] = useState('');
   const [saveError, setSaveError] = useState('');
 
-  function refresh() {
-    setSaved(getSavedScripts());
-  }
+  const refresh = () => setSlots(getSavedScripts());
 
-  function handleSave() {
-    const name = newName.trim();
-    if (!name) {
-      setSaveError('Please enter a name.');
-      return;
-    }
-    const ok = saveScript(name, currentScript);
-    if (!ok) {
-      setSaveError('All 10 slots are full. Delete a saved script first.');
-      return;
-    }
+  const save = () => {
+    const trimmed = name.trim();
+    if (!trimmed) { setSaveError('Name required'); return; }
+    if (slots.some((sl) => sl.name === trimmed)) { setSaveError(`"${trimmed}" already exists`); return; }
+    saveScript(trimmed, currentSource);
+    setName('');
     setSaveError('');
-    setNewName('');
     refresh();
-  }
+  };
 
-  function handleDelete(name: string) {
-    if (!confirm(`Delete saved script "${name}"?`)) return;
-    deleteSavedScript(name);
-    refresh();
-  }
+  const load = (slotName: string) => {
+    const slot = getSavedScripts().find((sl) => sl.name === slotName);
+    if (slot) onLoad(slot.script);
+  };
 
-  function handleRename(oldName: string) {
-    const newNameVal = prompt(`Rename "${oldName}" to:`, oldName);
-    if (!newNameVal || newNameVal === oldName) return;
-    renameSavedScript(oldName, newNameVal);
+  const del = (slotName: string) => {
+    deleteSavedScript(slotName);
     refresh();
-  }
+  };
+
+  const rename = (oldName: string) => {
+    const newName = prompt(`Rename "${oldName}" to:`, oldName);
+    if (!newName || newName === oldName) return;
+    renameSavedScript(oldName, newName);
+    refresh();
+  };
 
   return (
-    <div class="saved-scripts">
-      <div class="saved-scripts-save-row">
+    <div class={s.container}>
+      <div class={s.saveRow}>
         <input
+          class={s.nameInput}
           type="text"
           placeholder="Script name…"
-          value={newName}
-          onInput={(e) => setNewName((e.target as HTMLInputElement).value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+          value={name}
+          onInput={(e) => { setName((e.target as HTMLInputElement).value); setSaveError(''); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
         />
-        <button onClick={handleSave}>Save current</button>
-        {saveError && <span class="save-error">{saveError}</span>}
+        <button onClick={save}>Save current</button>
+        {saveError && <span class={s.saveError}>{saveError}</span>}
       </div>
 
-      {saved.length === 0 ? (
-        <p class="saved-scripts-empty">No saved scripts yet. Type a name above and click "Save current".</p>
+      {slots.length === 0 ? (
+        <p class={s.emptyMessage}>No saved scripts yet.</p>
       ) : (
-        <div class="saved-scripts-list">
-          {saved.map((s) => (
-            <div key={s.name} class="saved-script-slot">
-              <button class="load-btn" onClick={() => onLoad(s.script)} title={`Load "${s.name}"`}>
-                {s.name}
-              </button>
-              <button class="icon-btn" onClick={() => handleRename(s.name)} title="Rename">✎</button>
-              <button class="icon-btn danger" onClick={() => handleDelete(s.name)} title="Delete">✕</button>
+        <div class={s.slotList}>
+          {slots.map(({ name: n }) => (
+            <div key={n} class={s.slot}>
+              <button class={s.loadBtn} onClick={() => load(n)}>{n}</button>
+              <button class={s.slotIconBtn} onClick={() => rename(n)} title="Rename">✏️</button>
+              <button class={`${s.slotIconBtn} ${s.dangerBtn}`} onClick={() => del(n)} title="Delete">✕</button>
             </div>
           ))}
         </div>

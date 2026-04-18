@@ -1,43 +1,40 @@
-/**
- * Examples dropdown menu.
- */
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { EXAMPLES } from '../examples/index.js';
-import { setLastExample } from '../storage/localStorage.js';
+import * as s from './ExamplesMenu.css.js';
 
 interface ExamplesMenuProps {
-  currentScript: string;
-  onLoad: (script: string, name: string) => void;
+  onSelect: (src: string) => void;
 }
 
-export function ExamplesMenu({ currentScript, onLoad }: ExamplesMenuProps) {
+export function ExamplesMenu({ onSelect }: ExamplesMenuProps) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  function handleSelect(name: string, script: string) {
-    setOpen(false);
-    if (
-      currentScript.trim() &&
-      !confirm(`Load example "${name}"? Your current script will be replaced.`)
-    ) return;
-    setLastExample(name);
-    onLoad(script, name);
-  }
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [open]);
 
   return (
-    <div class="examples-menu">
-      <button class="examples-trigger" onClick={() => setOpen((v) => !v)}>
+    <div class={s.menu} ref={ref}>
+      <button class={s.trigger} onClick={() => setOpen(o => !o)}>
         Examples ▾
       </button>
       {open && (
-        <div class="examples-dropdown">
+        <div class={s.dropdown}>
           {EXAMPLES.map((ex) => (
             <button
               key={ex.name}
-              class="example-item"
-              onClick={() => handleSelect(ex.name, ex.script)}
+              class={s.item}
+              onClick={() => { onSelect(ex.content); setOpen(false); }}
             >
-              <span class="example-name">{ex.name}</span>
-              <span class="example-desc">{ex.description}</span>
+              <span class={s.itemName}>{ex.name}</span>
+              <span class={s.itemDesc}>{ex.description}</span>
             </button>
           ))}
         </div>

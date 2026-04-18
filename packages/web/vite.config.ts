@@ -1,12 +1,13 @@
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
+import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
-  plugins: [preact()],
+  plugins: [preact(), vanillaExtractPlugin()],
   // GitHub Pages deploys to https://robertmassaioli.github.io/cast-builder/
   base: '/cast-builder/',
   resolve: {
