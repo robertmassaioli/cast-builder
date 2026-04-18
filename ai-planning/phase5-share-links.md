@@ -301,7 +301,116 @@ Share button.
 
 ---
 
-## 9. Summary
+## 9. Include Directives in Shared Scripts
+
+Scripts that use `include:` or `>> file.txt` depend on **named files** that are
+stored in the recipient's localStorage. A share link only encodes the main
+script — it cannot encode the included files.
+
+### The problem
+
+If a user shares this script:
+```
+include: login.castscript#login
+```
+
+The recipient will see a compile error:
+```
+✘ File not found: login.castscript [NOT_FOUND]
+```
+
+because their localStorage doesn't contain a script named `login.castscript`.
+
+### Options
+
+#### Option A — Detect and warn (minimal, recommended for Phase 5)
+
+Before generating the share URL, scan the script for `include:` and `>>`
+directives. If any are found, show a warning in the Share UI:
+
+> ⚠️ This script uses `include:` directives. Recipients will need the following
+> scripts saved in their browser to compile it:
+> - `login.castscript`
+>
+> Consider inlining the content or sharing those scripts separately.
+
+No change to encoding — the share link is still generated. The recipient sees
+a compile error with a clear `NOT_FOUND` message (already handled by
+`onResolveError: 'warn'` mode).
+
+**Pros:** Simple, no extra encoding work  
+**Cons:** Recipient gets a broken link unless they manually add the included files
+
+#### Option B — Inline all includes before sharing (recommended for Phase 6+)
+
+Before encoding, recursively resolve all `include:` directives from localStorage
+and inline them as `>` output lines or as named blocks embedded in the script.
+Essentially a "flatten" operation that produces a self-contained script.
+
+```typescript
+export function flattenIncludes(script: string, savedScripts: Map<string, string>): string {
+  // Replace each `include: name` with the content of the named saved script
+  // Recursively flattens nested includes (with depth limit)
+}
+```
+
+The share link then encodes the flattened script — fully self-contained, no
+dependencies on the recipient's localStorage.
+
+**Pros:** Share links always work, no dependencies  
+**Cons:** The flattened script may be larger; the recipient can't see the modular
+structure; requires implementing `flattenIncludes()`. Deferred to Phase 6.
+
+#### Option C — Encode all dependencies in the URL
+
+Encode the main script + all included scripts as a JSON bundle, compress and
+share as `?s=<bundle>`.
+
+```typescript
+interface ShareBundle {
+  main: string;
+  files: Record<string, string>; // { 'login.castscript': '...' }
+}
+```
+
+On load, the banner offers to import all included files into the recipient's
+saved scripts automatically.
+
+**Pros:** Fully self-contained, preserves modularity, recipient gets the included
+files in their saved scripts  
+**Cons:** Larger URL (multiple scripts encoded); more complex banner UI;
+potential for name collisions with recipient's existing saved scripts
+
+**Deferred to Phase 6.**
+
+### Phase 5 recommendation: Option A
+
+Detect `include:` / `>>` directives and warn the user before sharing. The
+compile error on the recipient's end will be clear (`NOT_FOUND`), and the
+`--on-resolve-error: warn` mode means the cast will still compile partially
+(skipping the missing includes) rather than failing entirely.
+
+Add a pre-share check:
+
+```typescript
+export function detectExternalDependencies(script: string): string[] {
+  const deps: string[] = [];
+  for (const line of script.split('\n')) {
+    const includeMatch = line.match(/^include:\s*(\S+?)(?:#\S+)?$/);
+    const fileMatch    = line.match(/^>>\s*(\S+)$/);
+    if (includeMatch?.[1]) deps.push(includeMatch[1]);
+    if (fileMatch?.[1])    deps.push(fileMatch[1]);
+  }
+  return [...new Set(deps)];
+}
+```
+
+If `detectExternalDependencies(script).length > 0`, show the warning alongside
+the share URL.
+
+---
+
+## 10. Summary
 
 | Decision | Choice | Rationale |
 |---|---|---|
