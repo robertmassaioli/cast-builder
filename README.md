@@ -133,6 +133,8 @@ cast-builder compile <script> [output]
   --seed <n>               RNG seed for deterministic/reproducible timing
   --no-jitter              Disable timing jitter
   --now <timestamp>        Override cast header timestamp (Unix seconds; 0 = strip date)
+  --on-resolve-error <mode>  error (default) | warn | skip — controls behaviour when
+                             ">>" or "include:" can't find a file
   --overwrite              Overwrite existing output file
 
 cast-builder validate <script>

@@ -241,7 +241,7 @@ the expected publish flow for contributors.
 
 ---
 
-## 10. 🏗️ Expose `onResolveError` as a CLI Flag
+## 10. ✅ ~~Expose `onResolveError` as a CLI Flag~~ (DONE)
 
 **Category:** Functionality / DX  
 **Files:** `packages/cli/src/commands/compile.ts`, `packages/cli/README.md`
@@ -284,4 +284,4 @@ Document this in the CLI README alongside the other compile flags.
 | 7 | ✅ ~~Remove stale phase comments~~ | Tiny | Low |
 | 8 | ✅ ~~Missing examples for raw/set/block include~~ | Small | Medium |
 | 9 | 🏗️ `prepublishOnly` build guard | Tiny | Medium |
-| 10 | 🏗️ `--on-resolve-error` CLI flag | Small | Medium |
+| 10 | ✅ ~~`--on-resolve-error` CLI flag~~ | Small | Medium |

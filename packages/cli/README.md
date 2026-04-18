@@ -103,6 +103,10 @@ cast-builder compile <script> [output] [options]
   --no-jitter                 Disable timing jitter (fully deterministic output)
   --now <timestamp>           Override cast header timestamp (Unix seconds; use 0
                               for reproducible/shareable output)
+  --on-resolve-error <mode>   How to handle missing files from ">>" and "include:":
+                                error  — abort with an error (default)
+                                warn   — emit a warning comment and continue
+                                skip   — silently skip the directive and continue
   --overwrite                 Overwrite existing output file
 
 cast-builder validate <script>

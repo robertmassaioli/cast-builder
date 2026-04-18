@@ -14,6 +14,7 @@ export interface CompileOptions {
   seed?: string;
   noJitter?: boolean;
   now?: string;
+  onResolveError?: 'error' | 'warn' | 'skip';
   overwrite?: boolean;
 }
 
@@ -26,6 +27,10 @@ export function registerCompile(program: Command): void {
     .option('--seed <n>', 'Seed for RNG (makes timing deterministic)')
     .option('--no-jitter', 'Disable timing jitter (fully deterministic)')
     .option('--now <timestamp>', 'Override the cast header timestamp (Unix seconds, use 0 for reproducible output)')
+    .option(
+      '--on-resolve-error <mode>',
+      'How to handle missing files from ">>" and "include:": error (default) | warn | skip',
+    )
     .option('--overwrite', 'Overwrite output file if it exists')
     .action(async (scriptPath: string, outputPath: string | undefined, opts: CompileOptions) => {
       // Read input
@@ -48,10 +53,17 @@ export function registerCompile(program: Command): void {
       if (opts.seed) config.typingSeed = parseInt(opts.seed, 10);
       if (opts.noJitter) { config.typingSpeed = 'instant'; }
 
+      // Validate --on-resolve-error value
+      const onResolveError = opts.onResolveError ?? 'error';
+      if (onResolveError !== 'error' && onResolveError !== 'warn' && onResolveError !== 'skip') {
+        console.error(`Error: --on-resolve-error must be one of: error, warn, skip`);
+        process.exit(1);
+      }
+
       // Compile
       const compiled = await compile(config, nodes, {
         resolver: createNodeResolver(sourceDir),
-        onResolveError: 'error',
+        onResolveError,
         ...(opts.now !== undefined ? { now: parseInt(opts.now, 10) } : {}),
       });
 
