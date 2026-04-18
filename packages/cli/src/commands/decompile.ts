@@ -1,5 +1,5 @@
 /**
- * `cast-builder decompile` command handler. (Phase 2)
+ * `cast-builder decompile` command handler.
  *
  * Reverse-engineers a .cast file into a best-effort .castscript.
  *

@@ -1,5 +1,4 @@
 // Parser types — the contract between the lexer, parser, compiler, and test suite.
-// These types are frozen in Phase 0; implementations are filled in Phase 1+.
 
 export type ConfigKey =
   | 'title'

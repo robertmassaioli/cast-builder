@@ -1,6 +1,5 @@
 /**
  * TimingEngine — maintains the running clock and typing jitter.
- * Phase 0: types and structure. Full implementation in Phase 1.
  */
 
 import { jitterMs, createRng } from '../util/rng.js';

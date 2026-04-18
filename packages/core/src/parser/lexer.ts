@@ -1,6 +1,5 @@
 /**
  * Lexer — tokenises a raw .castscript string into a flat list of Tokens.
- * Phase 0: structure only. Full implementation in Phase 1.
  */
 
 import { type Token, type TokenKind } from './types.js';
@@ -49,6 +48,6 @@ function classifyLine(line: string, lineNum: number): Token {
   const configMatch = line.match(/^(\S[^:]*?)\s*:\s*(.*)$/);
   if (configMatch) return make('config-line', line);
 
-  // Fallback — treat as comment so we don't hard-crash during Phase 0
+  // Fallback — treat as comment for unrecognised lines
   return make('comment');
 }

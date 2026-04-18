@@ -64,7 +64,7 @@ parse rather than crashing.
 
 ---
 
-## 3. 🔒 Add an Include Recursion Depth Limit
+## 3. ✅ ~~Add an Include Recursion Depth Limit~~ (DONE)
 
 **Category:** Security / Robustness  
 **File:** `packages/core/src/compiler/compiler.ts`
@@ -95,7 +95,7 @@ async function compileNodes(
 
 ---
 
-## 4. 📌 Pin GitHub Actions to Full Commit SHAs
+## 4. ~~📌 Pin GitHub Actions to Full Commit SHAs~~ (WON'T DO)
 
 **Category:** Security  
 **Files:** `.github/workflows/ci.yml`, `.github/workflows/publish.yml`
@@ -123,7 +123,7 @@ automatically.
 
 ---
 
-## 5. ⚡ Add a Floating-Point Precision Strategy to the v3 Encoder
+## 5. ~~⚡ Add a Floating-Point Precision Strategy to the v3 Encoder~~ (WON'T DO)
 
 **Category:** Code Quality / Correctness  
 **File:** `packages/core/src/encoder/v3.ts`
@@ -171,7 +171,7 @@ Neither file exists. Without them:
 
 ---
 
-## 7. 📝 Update Phase Comments in Source to Reflect Actual State
+## 7. ✅ ~~Update Phase Comments in Source to Reflect Actual State~~ (DONE)
 
 **Category:** Documentation / Code Quality  
 **Files:** `packages/core/src/parser/lexer.ts` (line 1), `packages/core/src/parser/parser.ts` (line 1), `packages/core/src/compiler/compiler.ts` (line 1)
@@ -278,10 +278,10 @@ Document this in the CLI README alongside the other compile flags.
 | 1 | ✅ ~~Path traversal in node resolver~~ | Small | High |
 | 2 | ✅ ~~JSON.parse error handling in decompile~~ | Small | Medium |
 | 3 | ✅ ~~Include recursion depth limit~~ | Small | High |
-| 4 | 📌 Pin GitHub Actions to commit SHAs | Small | Medium |
-| 5 | ⚡ Floating-point precision in v3 encoder | Medium | Low–Medium |
+| 4 | ~~📌 Pin GitHub Actions to commit SHAs~~ (WON'T DO) | Small | Medium |
+| 5 | ~~⚡ Floating-point precision in v3 encoder~~ (WON'T DO) | Medium | Low–Medium |
 | 6 | 📝 CONTRIBUTING.md + CHANGELOG.md | Medium | High |
-| 7 | 📝 Remove stale phase comments | Tiny | Low |
+| 7 | ✅ ~~Remove stale phase comments~~ | Tiny | Low |
 | 8 | 🧪 Missing examples for raw/set/block include | Small | Medium |
 | 9 | 🏗️ `prepublishOnly` build guard | Tiny | Medium |
 | 10 | 🏗️ `--on-resolve-error` CLI flag | Small | Medium |

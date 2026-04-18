@@ -1,6 +1,5 @@
 /**
  * Parser — converts a Token[] into a ParseResult (Config + ScriptNode[]).
- * Phase 0: structure and type-safe stubs only. Full implementation in Phase 1.
  */
 
 import { parseDuration } from '../util/duration.js';
@@ -242,7 +241,7 @@ function applyConfigKey(key: string, value: string, config: Config, line: number
       break;
     }
     default:
-      // Unknown keys are silently ignored in Phase 0
+      // Unknown keys are silently ignored
       break;
   }
 }
@@ -262,7 +261,6 @@ function parseTypingSpeed(value: string, line: number): TypingSpeed {
  * Parse a styled text string containing optional {modifier: content} tags
  * into a StyledText array.
  *
- * Phase 0: minimal recursive parser. Full Unicode/edge-case handling in Phase 1.
  */
 export function parseStyledText(input: string): StyledText {
   const result: StyledText = [];
@@ -293,7 +291,7 @@ export function parseStyledText(input: string): StyledText {
     const modifierStr = input.slice(braceIdx + 1, colonIdx).trim();
     const modifiers = modifierStr.split(/\s+/).filter(Boolean);
 
-    // Find matching closing brace (handles nesting depth = 1 for Phase 0)
+    // Find matching closing brace (handles arbitrary nesting depth)
     let depth = 1;
     let j = colonIdx + 2;
     while (j < input.length && depth > 0) {
