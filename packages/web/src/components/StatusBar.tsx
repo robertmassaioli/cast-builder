@@ -1,48 +1,49 @@
-/**
- * Status bar — shows compile status and action buttons.
- */
-import type { CompileResult } from '../compiler/compile.js';
+import * as s from './StatusBar.css.js';
 
 interface StatusBarProps {
-  result: CompileResult | null;
-  isCompiling: boolean;
-  onCompile: () => void;
-  onDownload: () => void;
-  onCopy: () => void;
+  state: 'ok' | 'error' | 'neutral';
+  text: string;
+  castContent: string | null;
+  source: string;
   onSave: () => void;
 }
 
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+export function StatusBar({ state, text, castContent, source, onSave }: StatusBarProps) {
+  const stateClass = state === 'ok' ? s.statusOk : state === 'error' ? s.statusError : s.statusNeutral;
 
-export function StatusBar({ result, isCompiling, onCompile, onDownload, onCopy, onSave }: StatusBarProps) {
-  const statusText = isCompiling
-    ? '⟳ Compiling…'
-    : result === null
-    ? 'Ready'
-    : result.ok
-    ? `✔ Compiled in ${result.durationMs}ms · ${result.eventCount} events · ${formatDuration(result.totalSeconds)}`
-    : `✘ Error${result.line ? ` on line ${result.line}` : ''}: ${result.message}`;
+  const download = () => {
+    if (!castContent) return;
+    const blob = new Blob([castContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'recording.cast';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const statusClass = result === null || isCompiling
-    ? 'status-neutral'
-    : result.ok
-    ? 'status-ok'
-    : 'status-error';
+  const copy = () => {
+    if (castContent) navigator.clipboard.writeText(castContent);
+  };
+
+  const downloadScript = () => {
+    const blob = new Blob([source], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'recording.castscript';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <div class={`status-bar ${statusClass}`}>
-      <span class="status-text">{statusText}</span>
-      <div class="status-actions">
-        <button onClick={onCompile} title="Compile now">Compile</button>
-        <button onClick={onDownload} disabled={!result?.ok} title="Download .cast file">
-          Download .cast
-        </button>
-        <button onClick={onCopy} title="Copy script to clipboard">Copy script</button>
-        <button onClick={onSave} title="Save to browser storage">Save</button>
+    <div class={`${s.statusBar} ${stateClass}`}>
+      <span class={s.statusText}>{text}</span>
+      <div class={s.statusActions}>
+        <button onClick={downloadScript} title="Download .castscript">⬇ Script</button>
+        <button onClick={download} disabled={!castContent} title="Download .cast file">⬇ .cast</button>
+        <button onClick={copy} disabled={!castContent} title="Copy .cast to clipboard">📋 Copy</button>
+        <button onClick={onSave} title="Manage saved scripts">💾 Saved</button>
       </div>
     </div>
   );

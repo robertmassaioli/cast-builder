@@ -1,55 +1,58 @@
-/**
- * asciinema-player wrapper component.
- */
 import { useEffect, useRef } from 'preact/hooks';
-import * as AsciinemaPlayer from 'asciinema-player';
 import 'asciinema-player/dist/bundle/asciinema-player.css';
+import * as s from './Player.css.js';
 
 interface PlayerProps {
-  cast: string | null;   // NDJSON asciicast v3 string, or null if no compile yet
-  speed?: number;
+  castContent: string | null;
+  speed: number;
 }
 
-export function Player({ cast, speed = 1 }: PlayerProps) {
+export function Player({ castContent, speed }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<{ dispose?: () => void } | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || !cast) return;
+    // Dynamically import asciinema-player to allow chunk splitting
+    import('asciinema-player').then((mod) => {
+      const createPlayer = mod.create ?? mod.default?.create;
+      if (!containerRef.current || !castContent || !createPlayer) return;
 
-    // Dispose previous player instance
-    playerRef.current?.dispose?.();
+      // Clean up previous player
+      playerRef.current?.dispose?.();
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
 
-    // Create a blob URL from the cast NDJSON string
-    const blob = new Blob([cast], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
+      const blob = new Blob([castContent], { type: 'text/plain' });
+      blobUrlRef.current = URL.createObjectURL(blob);
 
-    const player = AsciinemaPlayer.create(url, containerRef.current, {
-      autoPlay: true,
-      speed,
-      fit: 'width',
-      theme: 'monokai',
+      // Clear container
+      containerRef.current.innerHTML = '';
+
+      playerRef.current = createPlayer(blobUrlRef.current, containerRef.current, {
+        autoPlay: true,
+        speed,
+        fit: 'width',
+        theme: 'monokai',
+      });
     });
 
-    playerRef.current = player;
-
     return () => {
-      player?.dispose?.();
-      URL.revokeObjectURL(url);
+      playerRef.current?.dispose?.();
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
     };
-  }, [cast, speed]);
+  }, [castContent, speed]);
 
-  if (!cast) {
+  if (!castContent) {
     return (
-      <div class="player-placeholder">
-        <div class="player-placeholder-inner">
-          <span>▶</span>
-          <p>Your compiled recording will appear here.</p>
-          <p>Start typing in the editor to compile.</p>
+      <div class={s.placeholder}>
+        <div class={s.placeholderInner}>
+          <span class={s.placeholderIcon}>▶</span>
+          <p>Your compiled recording will appear here</p>
+          <p class={s.placeholderText}>Edit the script on the left to get started</p>
         </div>
       </div>
     );
   }
 
-  return <div ref={containerRef} style={{ width: '100%' }} />;
+  return <div class={s.playerContainer} ref={containerRef} />;
 }

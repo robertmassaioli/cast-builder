@@ -1,233 +1,207 @@
-/**
- * Root application component.
- * Phase 4: resizable panels, keyboard shortcut hint, improved dark/light toggle.
- */
-import { useState, useCallback, useEffect, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { Editor } from './components/Editor.js';
 import { Player } from './components/Player.js';
-import { StatusBar } from './components/StatusBar.js';
-import { SavedScripts } from './components/SavedScripts.js';
+import { Footer } from './components/Footer.js';
 import { ExamplesMenu } from './components/ExamplesMenu.js';
 import { compileScript, debounce, type CompileResult } from './compiler/compile.js';
 import {
   getCurrentScript,
   setCurrentScript,
   getTheme,
-  setTheme,
+  setTheme as saveTheme,
   getPlayerSpeed,
   setPlayerSpeed,
   type Theme,
 } from './storage/localStorage.js';
-import { EXAMPLES } from './examples/index.js';
+import { darkTheme, lightTheme } from './theme.css.js';
+import * as s from './App.css.js';
 
-const DEBOUNCE_MS = 500;
-const DEFAULT_SCRIPT = EXAMPLES[0]?.script ?? '';
+const DEBOUNCE_MS = 400;
+const SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+type CompileState =
+  | { status: 'idle' }
+  | { status: 'compiling' }
+  | ({ status: 'ok' } & Extract<CompileResult, { ok: true }>)
+  | ({ status: 'error' } & Extract<CompileResult, { ok: false }>);
 
 export function App() {
-  const [script, setScript] = useState<string>(() => {
-    const saved = getCurrentScript();
-    return saved.trim() ? saved : DEFAULT_SCRIPT;
-  });
-  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
-  const [isCompiling, setIsCompiling] = useState(false);
-  const [theme, setThemeState] = useState<Theme>(getTheme);
+  const [source, setSource] = useState(() => getCurrentScript());
+  const [compileState, setCompileState] = useState<CompileState>({ status: 'idle' });
   const [showSaved, setShowSaved] = useState(false);
-  const [playerSpeed, setPlayerSpeedState] = useState<number>(getPlayerSpeed);
-
-  // Panel resize state
-  const [editorWidthPct, setEditorWidthPct] = useState(50);
-  const isDragging = useRef(false);
+  const [theme, setTheme] = useState<Theme>(() => getTheme());
+  const [speed, setSpeed] = useState<number>(() => getPlayerSpeed());
+  const [splitPct, setSplitPct] = useState(50);
+  const dragging = useRef(false);
   const mainRef = useRef<HTMLDivElement>(null);
 
-  // Apply theme to document root
+  // Apply theme class to body
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
+    document.body.className = theme === 'dark' ? darkTheme : lightTheme;
+    saveTheme(theme);
   }, [theme]);
 
-  // Compile function
-  const runCompile = useCallback(async (src: string) => {
-    setIsCompiling(true);
-    const result = await compileScript(src);
-    setCompileResult(result);
-    setIsCompiling(false);
-  }, []);
+  // Debounced compile
+  const doCompile = useCallback(
+    debounce(async (src: string) => {
+      setCompileState({ status: 'compiling' });
+      const r = await compileScript(src);
+      if (r.ok) {
+        setCompileState({ status: 'ok', ...r });
+      } else {
+        setCompileState({ status: 'error', ...r });
+      }
+    }, DEBOUNCE_MS),
+    [],
+  );
 
-  // Debounced compile on edit
-  const debouncedCompile = useRef(
-    debounce((src: string) => { void runCompile(src); }, DEBOUNCE_MS),
-  ).current;
-
-  // Compile on mount
+  // Compile on source change
   useEffect(() => {
-    void runCompile(script);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setCurrentScript(source);
+    doCompile(source);
+  }, [source, doCompile]);
 
-  function handleScriptChange(newScript: string) {
-    setScript(newScript);
-    setCurrentScript(newScript);
-    debouncedCompile(newScript);
-  }
-
-  function handleLoadScript(newScript: string) {
-    setScript(newScript);
-    setCurrentScript(newScript);
-    void runCompile(newScript);
-  }
-
-  function handleThemeToggle() {
-    const next: Theme = theme === 'dark' ? 'light' : 'dark';
-    setThemeState(next);
-    setTheme(next);
-  }
-
-  function handleSpeedChange(speed: number) {
-    setPlayerSpeedState(speed);
-    setPlayerSpeed(speed);
-  }
-
-  function handleDownload() {
-    if (!compileResult?.ok) return;
-    const title = script.match(/^title:\s*(.+)$/m)?.[1]?.trim() ?? 'recording';
-    const safe = title.replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
-    const blob = new Blob([compileResult.cast], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${safe}.cast`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(script);
-  }
-
-  // ── Panel resize via drag handle ──────────────────────────────────────────
-
-  function handleDragStart(e: MouseEvent) {
-    e.preventDefault();
-    isDragging.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }
+  // Ctrl/Cmd+Enter — immediate compile
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        compileScript(source).then((r) => {
+          if (r.ok) {
+            setCompileState({ status: 'ok', ...r });
+          } else {
+            setCompileState({ status: 'error', ...r });
+          }
+        });
+      }
+    },
+    [source],
+  );
 
   useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!isDragging.current || !mainRef.current) return;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  // Panel resize drag
+  const onMouseDown = useCallback(() => { dragging.current = true; }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current || !mainRef.current) return;
       const rect = mainRef.current.getBoundingClientRect();
       const pct = ((e.clientX - rect.left) / rect.width) * 100;
-      setEditorWidthPct(Math.min(80, Math.max(20, pct)));
-    }
-    function onMouseUp() {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
+      setSplitPct(Math.max(20, Math.min(80, pct)));
+    };
+    const onUp = () => { dragging.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
     };
   }, []);
 
-  const errorLine = compileResult?.ok === false ? compileResult.line : undefined;
-  const castOutput = compileResult?.ok ? compileResult.cast : null;
+  const castContent = compileState.status === 'ok' ? compileState.cast : null;
+
+  const statusText =
+    compileState.status === 'ok'
+      ? `✔ ${compileState.eventCount} events · ${compileState.totalSeconds.toFixed(1)}s · compiled in ${compileState.durationMs}ms`
+      : compileState.status === 'error'
+      ? `✘ ${compileState.message}`
+      : compileState.status === 'compiling'
+      ? 'Compiling…'
+      : 'Ready — edit the script to compile';
+
+  const statusState =
+    compileState.status === 'ok' ? 'ok'
+    : compileState.status === 'error' ? 'error'
+    : 'neutral';
 
   return (
-    <div class="app">
+    <div class={s.appRoot}>
       {/* Header */}
-      <header class="app-header">
-        <div class="app-title">
-          <span class="logo">▶</span>
-          <span>cast-builder <em>live editor</em></span>
+      <header class={s.header}>
+        <div class={s.appTitle}>
+          <span class={s.logo}>▶</span>
+          cast-builder
+          <em class={s.subtitle}>live editor</em>
         </div>
-        <div class="header-actions">
-          <ExamplesMenu currentScript={script} onLoad={handleLoadScript} />
+        <div class={s.headerActions}>
+          <ExamplesMenu onSelect={setSource} />
           <button
-            class="theme-toggle"
-            onClick={handleThemeToggle}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            aria-label="Toggle theme"
+            class={s.themeToggle}
+            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            title="Toggle dark/light theme"
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
           <a
+            class={s.githubLink}
             href="https://github.com/robertmassaioli/cast-builder"
             target="_blank"
-            rel="noreferrer"
-            class="github-link"
+            rel="noopener noreferrer"
           >
-            GitHub
+            GitHub ↗
           </a>
         </div>
       </header>
 
       {/* Main panels */}
-      <main class="app-main" ref={mainRef}>
-        <div class="editor-panel" style={{ flexBasis: `${editorWidthPct}%` }}>
-          <div class="editor-label">
-            <span>.castscript</span>
-            <span class="shortcut-hint">Ctrl+Enter to compile</span>
+      <main class={s.appMain} ref={mainRef}>
+        {/* Editor panel */}
+        <div
+          class={s.panel}
+          style={{ flexBasis: `${splitPct}%`, flexShrink: 0, flexGrow: 0 }}
+        >
+          <div class={s.panelLabel}>
+            <span>📝 .castscript</span>
+            <span class={s.shortcutHint}>Ctrl+Enter to compile</span>
           </div>
-          <div class="editor-body">
+          <div class={s.panelBody}>
             <Editor
-              value={script}
-              onChange={handleScriptChange}
-              onCompile={() => { void runCompile(script); }}
-              errorLine={errorLine}
-              theme={theme}
+              value={source}
+              onChange={setSource}
+              errorLine={compileState.status === 'error' ? compileState.line : undefined}
             />
           </div>
         </div>
 
-        {/* Drag handle */}
-        <div
-          class="resize-handle"
-          onMouseDown={handleDragStart}
-          title="Drag to resize"
-        />
+        {/* Resize handle */}
+        <div class={s.resizeHandle} onMouseDown={onMouseDown} />
 
-        <div class="player-panel" style={{ flexBasis: `${100 - editorWidthPct}%` }}>
-          <div class="player-label">
-            <span>Preview</span>
-            <div class="speed-controls">
-              {[0.5, 1, 1.5, 2].map((s) => (
+        {/* Player panel */}
+        <div class={s.panel} style={{ flex: 1, minWidth: 0 }}>
+          <div class={s.panelLabel}>
+            <span>▶ Preview</span>
+            <div class={s.speedControls}>
+              {SPEEDS.map((sp) => (
                 <button
-                  key={s}
-                  class={`speed-btn ${playerSpeed === s ? 'active' : ''}`}
-                  onClick={() => handleSpeedChange(s)}
+                  key={sp}
+                  class={`${s.speedBtn}${speed === sp ? ` ${s.speedBtnActive}` : ''}`}
+                  onClick={() => { setSpeed(sp); setPlayerSpeed(sp); }}
                 >
-                  {s}×
+                  {sp}×
                 </button>
               ))}
             </div>
           </div>
-          <div class="player-body">
-            <Player cast={castOutput} speed={playerSpeed} />
+          <div class={s.playerBody}>
+            <Player castContent={castContent} speed={speed} />
           </div>
         </div>
       </main>
 
-      {/* Status bar */}
-      <StatusBar
-        result={compileResult}
-        isCompiling={isCompiling}
-        onCompile={() => { void runCompile(script); }}
-        onDownload={handleDownload}
-        onCopy={() => { void handleCopy(); }}
-        onSave={() => setShowSaved((v) => !v)}
+      {/* Footer: status bar + saved scripts panel */}
+      <Footer
+        state={statusState}
+        text={statusText}
+        castContent={castContent}
+        source={source}
+        showSaved={showSaved}
+        onToggleSaved={() => setShowSaved((v) => !v)}
+        onLoad={setSource}
       />
-
-      {/* Saved scripts panel */}
-      {showSaved && (
-        <SavedScripts
-          currentScript={script}
-          onLoad={handleLoadScript}
-        />
-      )}
     </div>
   );
 }
