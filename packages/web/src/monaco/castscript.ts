@@ -55,8 +55,18 @@ export function registerCastscript(monaco: typeof Monaco): void {
       ],
 
       commandLine: [
-        // The command text — rest of the line
-        [/.+/, 'operator.command'],
+        // Style tags inside command lines e.g. {bold: text}
+        [/\{(?:[a-z-]+ )*[a-z-]+(?:\s+[a-z-]+)*:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
+        [/\}/, 'string.escape.tag'],
+        [/[^{}]+/, 'operator.command'],
+        [/$/, '', '@pop'],
+      ],
+
+      commandStyled: [
+        // Inside {bold: ...} within a command line
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
+        [/\}/, { token: 'string.escape.tag', next: '@pop' }],
+        [/[^{}]+/, 'operator.command'],
         [/$/, '', '@pop'],
       ],
 
@@ -68,9 +78,18 @@ export function registerCastscript(monaco: typeof Monaco): void {
       ],
 
       styledLine: [
-        // Inline style tags: {modifier: text} or {#rrggbb: text}
-        [/\{[a-z#][^:}]*:/, 'string.escape.tag'],
+        // Inline style tags: {modifier: text} or {bold green: text} or {#rrggbb: text}
+        // The modifier name(s) and colon get the tag token
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@styleTagContent' }],
         [/\}/, 'string.escape.tag'],
+        [/[^{}]+/, 'string.output'],
+        [/$/, '', '@pop'],
+      ],
+
+      styleTagContent: [
+        // Content inside {style: HERE} — can contain nested style tags
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@styleTagContent' }],
+        [/\}/, { token: 'string.escape.tag', next: '@pop' }],
         [/[^{}]+/, 'string.output'],
         [/$/, '', '@pop'],
       ],
