@@ -118,6 +118,8 @@ export function registerCastscript(monaco: typeof Monaco): void {
     base: 'vs-dark',
     inherit: true,
     rules: [
+      // Use empty-string token match to reset ALL inherited Monaco base colours
+      { token: '',                   foreground: 'c9d1d9' },
       { token: 'keyword.section',    foreground: '7c6af7', fontStyle: 'bold' },
       { token: 'keyword',            foreground: '7c6af7' },
       { token: 'keyword.set',        foreground: '7c6af7' },
@@ -127,12 +129,18 @@ export function registerCastscript(monaco: typeof Monaco): void {
       { token: 'comment',            foreground: '6e7681', fontStyle: 'italic' },
       { token: 'tag',                foreground: 'd2a8ff', fontStyle: 'bold' },
       { token: 'tag.marker',         foreground: 'd2a8ff' },
+      // $ command lines — bold cyan/blue, clearly distinct from output
+      { token: 'operator',           foreground: '79c0ff' },
       { token: 'operator.command',   foreground: '79c0ff', fontStyle: 'bold' },
+      // > output lines — green, clearly distinct from commands
+      { token: 'string',             foreground: 'a8d8a8' },
       { token: 'string.output',      foreground: 'a8d8a8' },
       { token: 'string.include',     foreground: 'ffa657', fontStyle: 'italic' },
       { token: 'string.escape.tag',  foreground: 'ff7b72' },
+      { token: 'type',               foreground: 'ffa657' },
       { token: 'type.file',          foreground: 'ffa657' },
       { token: 'type.print',         foreground: 'a8d8a8' },
+      { token: 'attribute',          foreground: 'e3b341' },
       { token: 'attribute.name',     foreground: 'e3b341' },
       { token: 'delimiter',          foreground: '6e7681' },
       { token: 'number',             foreground: 'e3b341' },
@@ -161,6 +169,7 @@ export function registerCastscript(monaco: typeof Monaco): void {
     base: 'vs',
     inherit: true,
     rules: [
+      { token: '',                   foreground: '24292f' },
       { token: 'keyword.section',    foreground: '6e5fdb', fontStyle: 'bold' },
       { token: 'keyword',            foreground: '6e5fdb' },
       { token: 'keyword.set',        foreground: '6e5fdb' },
@@ -170,12 +179,18 @@ export function registerCastscript(monaco: typeof Monaco): void {
       { token: 'comment',            foreground: '57606a', fontStyle: 'italic' },
       { token: 'tag',                foreground: '8250df', fontStyle: 'bold' },
       { token: 'tag.marker',         foreground: '8250df' },
+      // $ command lines — bold dark-blue, clearly distinct from output
+      { token: 'operator',           foreground: '0550ae' },
       { token: 'operator.command',   foreground: '0550ae', fontStyle: 'bold' },
+      // > output lines — green, clearly distinct from commands
+      { token: 'string',             foreground: '1a7f37' },
       { token: 'string.output',      foreground: '1a7f37' },
       { token: 'string.include',     foreground: 'bc4c00', fontStyle: 'italic' },
       { token: 'string.escape.tag',  foreground: 'cf222e' },
+      { token: 'type',               foreground: 'bc4c00' },
       { token: 'type.file',          foreground: 'bc4c00' },
       { token: 'type.print',         foreground: '1a7f37' },
+      { token: 'attribute',          foreground: '953800' },
       { token: 'attribute.name',     foreground: '953800' },
       { token: 'delimiter',          foreground: '57606a' },
       { token: 'number',             foreground: '953800' },
