@@ -1,17 +1,17 @@
 /**
- * CodeMirror 6 editor component for .castscript files.
- * Phase 3: context-aware highlighting, error line decoration, theme support.
- * Phase 4: keyboard shortcuts (Ctrl/Cmd+Enter to compile).
+ * Monaco Editor component for .castscript files.
+ *
+ * Features:
+ *  - Full VS Code editing experience (find/replace, multi-cursor, etc.)
+ *  - .castscript Monarch syntax highlighting
+ *  - Context-aware completions + hover docs
+ *  - cast-dark / cast-light themes (no editor rebuild on switch)
+ *  - Error line decoration (red background + gutter icon)
+ *  - automaticLayout: true — handles panel resize automatically
  */
 import { useEffect, useRef } from 'preact/hooks';
-import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
-import { keymap } from '@codemirror/view';
-import { defaultKeymap } from '@codemirror/commands';
-import { castscriptLanguage } from '../editor/language.js';
-import { darkHighlight, lightHighlight, errorLineTheme } from '../editor/highlight.js';
-import { castscriptAutocomplete } from '../editor/autocomplete.js';
-import { errorLineField, setErrorLine } from '../editor/errorDecoration.js';
+import type * as MonacoType from 'monaco-editor';
+import { registerCastscript } from '../monaco/castscript.js';
 import type { Theme } from '../storage/localStorage.js';
 
 interface EditorProps {
@@ -22,113 +22,169 @@ interface EditorProps {
   theme: Theme;
 }
 
+type MonacoEditor = MonacoType.editor.IStandaloneCodeEditor;
+type IDisposable = MonacoType.IDisposable;
+
+// Decoration collection ID — stable across updates
+const ERROR_DECORATION_CLASS = 'castscript-error-line';
+
 export function Editor({ value, onChange, onCompile, errorLine, theme }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
+  const editorRef = useRef<MonacoEditor | null>(null);
+  const monacoRef = useRef<typeof MonacoType | null>(null);
+  const decorationsRef = useRef<string[]>([]);
+  const listenerRef = useRef<IDisposable | null>(null);
 
+  // ── Mount: dynamically import Monaco, register language, create editor ──────
   useEffect(() => {
     if (!containerRef.current) return;
+    let destroyed = false;
 
-    const updateListener = EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
-        onChange(update.state.doc.toString());
+    import('monaco-editor').then((monaco) => {
+      if (destroyed || !containerRef.current) return;
+      monacoRef.current = monaco;
+
+      // Register .castscript language (idempotent)
+      registerCastscript(monaco);
+
+      // Add global CSS for error line decoration
+      const styleId = 'castscript-error-style';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          .${ERROR_DECORATION_CLASS} { background: rgba(248, 81, 73, 0.15); }
+          .${ERROR_DECORATION_CLASS}-gutter {
+            background: #f85149;
+            width: 3px !important;
+            margin-left: 3px;
+          }
+        `;
+        document.head.appendChild(style);
       }
-    });
 
-    // Ctrl+Enter / Cmd+Enter → trigger compile
-    const compileKeymap = keymap.of([
-      {
-        key: 'Ctrl-Enter',
-        mac: 'Cmd-Enter',
-        run: () => { onCompile(); return true; },
-      },
-    ]);
+      const editor = monaco.editor.create(containerRef.current!, {
+        value,
+        language: 'castscript',
+        theme: theme === 'dark' ? 'cast-dark' : 'cast-light',
+        fontSize: 13,
+        fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+        fontLigatures: true,
+        lineNumbers: 'on',
+        minimap: { enabled: false },
+        automaticLayout: true,     // handles panel resize
+        scrollBeyondLastLine: false,
+        wordWrap: 'off',
+        tabSize: 2,
+        insertSpaces: true,
+        folding: true,
+        foldingStrategy: 'indentation',
+        bracketPairColorization: { enabled: true },
+        matchBrackets: 'always',
+        renderWhitespace: 'selection',
+        smoothScrolling: true,
+        cursorBlinking: 'smooth',
+        cursorSmoothCaretAnimation: 'on',
+        padding: { top: 8, bottom: 8 },
+        // Find widget
+        find: { addExtraSpaceOnTop: false },
+      });
 
-    const highlight = theme === 'dark' ? darkHighlight : lightHighlight;
-
-    const view = new EditorView({
-      state: EditorState.create({
-        doc: value,
-        extensions: [
-          basicSetup,
-          castscriptLanguage,
-          highlight,
-          errorLineTheme,
-          errorLineField,
-          castscriptAutocomplete,
-          compileKeymap,
-          keymap.of(defaultKeymap),
-          updateListener,
-          EditorView.theme({
-            '&': {
-              height: '100%',
-              fontSize: '13px',
-              backgroundColor: 'var(--bg-panel)',
-              color: 'var(--text)',
-            },
-            '.cm-scroller': {
-              overflow: 'auto',
-              fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-            },
-            '.cm-gutters': {
-              backgroundColor: 'var(--bg-panel)',
-              borderRight: '1px solid var(--border)',
-              color: 'var(--text-muted)',
-            },
-            '.cm-activeLineGutter': { backgroundColor: 'var(--bg-input)' },
-            '.cm-activeLine': { backgroundColor: 'var(--bg-input)' },
-            '.cm-cursor': { borderLeftColor: 'var(--accent)' },
-            '.cm-selectionBackground': { backgroundColor: 'var(--accent-dim) !important' },
-            '.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--accent-dim) !important' },
-            '.cm-tooltip': {
-              backgroundColor: 'var(--bg-panel)',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-            },
-            '.cm-tooltip-autocomplete ul li[aria-selected]': {
-              backgroundColor: 'var(--accent-dim)',
-              color: 'var(--text)',
-            },
-          }),
+      // Ctrl/Cmd+Enter → compile
+      editor.addAction({
+        id: 'castscript.compile',
+        label: 'Compile castscript',
+        keybindings: [
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
         ],
-      }),
-      parent: containerRef.current,
-    });
+        run: () => { onCompile(); },
+      });
 
-    viewRef.current = view;
+      // Listen for content changes
+      listenerRef.current = editor.onDidChangeModelContent(() => {
+        onChange(editor.getValue());
+      });
+
+      editorRef.current = editor;
+    });
 
     return () => {
-      view.destroy();
-      viewRef.current = null;
+      destroyed = true;
+      listenerRef.current?.dispose();
+      editorRef.current?.dispose();
+      editorRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only create once on mount
+  }, []); // Create once on mount
 
-  // Sync external value changes (e.g. loading an example or saved script)
+  // ── Sync external value (loading examples / saved scripts) ─────────────────
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    const current = view.state.doc.toString();
-    if (current !== value) {
-      view.dispatch({
-        changes: { from: 0, to: current.length, insert: value },
-      });
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (editor.getValue() !== value) {
+      // Preserve undo history with executeEdits
+      const model = editor.getModel();
+      if (model) {
+        editor.executeEdits('external-update', [{
+          range: model.getFullModelRange(),
+          text: value,
+          forceMoveMarkers: true,
+        }]);
+        editor.setScrollPosition({ scrollTop: 0 });
+      }
     }
   }, [value]);
 
-  // Update error line decoration
+  // ── Theme switching — no editor rebuild ─────────────────────────────────────
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    view.dispatch({
-      effects: setErrorLine.of(errorLine ?? null),
-    });
+    const monaco = monacoRef.current;
+    if (!monaco) return;
+    monaco.editor.setTheme(theme === 'dark' ? 'cast-dark' : 'cast-light');
+  }, [theme]);
+
+  // ── Error line decoration ───────────────────────────────────────────────────
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    if (errorLine == null) {
+      decorationsRef.current = editor.deltaDecorations(decorationsRef.current, []);
+      return;
+    }
+
+    const lineCount = model.getLineCount();
+    const line = Math.min(errorLine, lineCount);
+
+    decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+      {
+        range: {
+          startLineNumber: line,
+          startColumn: 1,
+          endLineNumber: line,
+          endColumn: model.getLineMaxColumn(line),
+        },
+        options: {
+          isWholeLine: true,
+          className: ERROR_DECORATION_CLASS,
+          glyphMarginClassName: `${ERROR_DECORATION_CLASS}-gutter`,
+          overviewRuler: {
+            color: '#f85149',
+            position: 4, // OverviewRulerLane.Right
+          },
+        },
+      },
+    ]);
+
+    // Scroll the error line into view
+    editor.revealLineInCenter(line);
   }, [errorLine]);
 
   return (
     <div
       ref={containerRef}
-      style={{ height: '100%', overflow: 'hidden' }}
+      style={{ height: '100%', width: '100%' }}
     />
   );
 }

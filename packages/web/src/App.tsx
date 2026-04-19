@@ -225,7 +225,12 @@ export function App() {
             <Editor
               value={source}
               onChange={setSource}
+              onCompile={() => compileScript(source).then((r) => {
+                if (r.ok) setCompileState({ status: 'ok', ...r });
+                else setCompileState({ status: 'error', ...r });
+              })}
               errorLine={compileState.status === 'error' ? compileState.line : undefined}
+              theme={theme}
             />
           </div>
         </div>
