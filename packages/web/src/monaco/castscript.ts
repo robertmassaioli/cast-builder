@@ -23,85 +23,68 @@ export function registerCastscript(monaco: typeof Monaco): void {
   monaco.languages.setMonarchTokensProvider('castscript', {
     tokenizer: {
       root: [
-        // Section headers
-        [/^--- (config|script) ---$/, 'keyword.section'],
-
-        // Comments
-        [/^\s*#.*$/, 'comment'],
-
-        // Block labels [name]
-        [/^\[.+\]$/, 'tag'],
-
-        // Script directives (must be checked before config keys)
-        // Match the directive prefix token, then enter a state for the rest of the line.
-        // IMPORTANT: '>' must be checked before '>>' would shadow it (actually >> is longer so ok).
-        // We match the FULL prefix including leading ^ so Monarch knows these are line-start rules.
-        [/^>>\s+.*$/, 'type.file'],          // >> file — whole line orange (no styled content)
-        [/^\$\s+/, { token: 'operator.command', next: '@commandLine' }],
-        [/^>\s?/,  { token: 'string.output', next: '@styledLine' }],
-        [/^print:\s*/, { token: 'type.print', next: '@styledLine' }],
-        [/^type:\s*/,  { token: 'keyword.type', next: '@restOfLine' }],
-        [/^hidden:\s*/, { token: 'keyword.hidden', next: '@restOfLine' }],
-        [/^raw:\s*/,    { token: 'keyword.raw', next: '@restOfLine' }],
-        [/^(wait|idle):\s*/, { token: 'number.duration', next: '@duration' }],
-        [/^(marker|resize):\s*/, { token: 'tag.marker', next: '@restOfLine' }],
-        [/^clear$/,   'keyword'],
-        [/^include:\s*/, { token: 'string.include', next: '@restOfLine' }],
-        [/^set\s+/,   { token: 'keyword.set', next: '@setLine' }],
-
-        // Config keys (key: value)
-        [/^(title|width|height|prompt|typing-speed|idle-time|theme|output-format|typing-seed)(\s*:)/, 
-          ['attribute.name', 'delimiter']],
-
-        // Fallback — plain text
-        [/.+/, 'text'],
+        [/^--- (config|script) ---$/, 'cs-section'],
+        [/^\s*#.*$/,                  'cs-comment'],
+        [/^\[.+\]$/,                  'cs-block'],
+        [/^>>\s+.*$/,                 'cs-file'],
+        [/^\$\s+/,     { token: 'cs-cmd',     next: '@commandLine' }],
+        [/^>\s?/,      { token: 'cs-out',     next: '@styledLine' }],
+        [/^print:\s*/, { token: 'cs-print',   next: '@styledLine' }],
+        [/^type:\s*/,  { token: 'cs-kw',      next: '@restOfLine' }],
+        [/^hidden:\s*/,{ token: 'cs-dim',     next: '@restOfLine' }],
+        [/^raw:\s*/,   { token: 'cs-raw',     next: '@restOfLine' }],
+        [/^(wait|idle):\s*/, { token: 'cs-wait', next: '@duration' }],
+        [/^(marker|resize):\s*/, { token: 'cs-marker', next: '@restOfLine' }],
+        [/^clear$/,    'cs-kw'],
+        [/^include:\s*/, { token: 'cs-include', next: '@restOfLine' }],
+        [/^set\s+/,    { token: 'cs-kw',      next: '@setLine' }],
+        [/^(title|width|height|prompt|typing-speed|idle-time|theme|output-format|typing-seed)(\s*:)/,
+          ['cs-key', 'cs-delim']],
+        [/.+/, 'cs-text'],
       ],
 
       commandLine: [
-        // End of line FIRST — prevents catch-all consuming it
         [/$/, { token: '', next: '@pop' }],
-        // Style tags inside command lines e.g. {bold: text}
-        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
-        [/\}/, 'string.escape.tag'],
-        [/[^{}\r\n]+/, 'operator.command'],
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'cs-tag', next: '@commandStyled' }],
+        [/\}/, 'cs-tag'],
+        [/[^{}\r\n]+/, 'cs-cmd'],
       ],
 
       commandStyled: [
         [/$/, { token: '', next: '@pop' }],
-        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
-        [/\}/, { token: 'string.escape.tag', next: '@pop' }],
-        [/[^{}\r\n]+/, 'operator.command'],
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'cs-tag', next: '@commandStyled' }],
+        [/\}/, { token: 'cs-tag', next: '@pop' }],
+        [/[^{}\r\n]+/, 'cs-cmd'],
       ],
 
       setLine: [
-        // "set key: value" — key portion
-        [/([\w-]+)(\s*:\s*)/, ['attribute.name', 'delimiter']],
-        [/.+/, 'text'],
-        [/$/, '', '@pop'],
+        [/$/, { token: '', next: '@pop' }],
+        [/([\w-]+)(\s*:\s*)/, ['cs-key', 'cs-delim']],
+        [/[^\r\n]+/, 'cs-text'],
       ],
 
       styledLine: [
         [/$/, { token: '', next: '@pop' }],
-        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@styleTagContent' }],
-        [/\}/, 'string.escape.tag'],
-        [/[^{}\r\n]+/, 'string.output'],
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'cs-tag', next: '@styleTagContent' }],
+        [/\}/, 'cs-tag'],
+        [/[^{}\r\n]+/, 'cs-out'],
       ],
 
       styleTagContent: [
         [/$/, { token: '', next: '@pop' }],
-        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@styleTagContent' }],
-        [/\}/, { token: 'string.escape.tag', next: '@pop' }],
-        [/[^{}\r\n]+/, 'string.output'],
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'cs-tag', next: '@styleTagContent' }],
+        [/\}/, { token: 'cs-tag', next: '@pop' }],
+        [/[^{}\r\n]+/, 'cs-out'],
       ],
 
       duration: [
         [/$/, { token: '', next: '@pop' }],
-        [/\d+(?:\.\d+)?s|\d+ms/, 'number'],
+        [/\d+(?:\.\d+)?s|\d+ms/, 'cs-num'],
       ],
 
       restOfLine: [
         [/$/, { token: '', next: '@pop' }],
-        [/[^\r\n]+/, 'text'],
+        [/[^\r\n]+/, 'cs-text'],
       ],
     },
   });
@@ -135,36 +118,27 @@ export function registerCastscript(monaco: typeof Monaco): void {
   // ── Themes ─────────────────────────────────────────────────────────────────
   monaco.editor.defineTheme('cast-dark', {
     base: 'vs-dark',
-    inherit: false,
+    inherit: true,
     rules: [
-      // Use empty-string token match to reset ALL inherited Monaco base colours
-      { token: '',                   foreground: 'c9d1d9' },
-      { token: 'keyword.section',    foreground: '7c6af7', fontStyle: 'bold' },
-      { token: 'keyword',            foreground: '7c6af7' },
-      { token: 'keyword.set',        foreground: '7c6af7' },
-      { token: 'keyword.type',       foreground: 'd2a8ff' },
-      { token: 'keyword.hidden',     foreground: '6e7681', fontStyle: 'italic' },
-      { token: 'keyword.raw',        foreground: 'ff7b72' },
-      { token: 'comment',            foreground: '6e7681', fontStyle: 'italic' },
-      { token: 'tag',                foreground: 'd2a8ff', fontStyle: 'bold' },
-      { token: 'tag.marker',         foreground: 'd2a8ff' },
-      // $ command lines — bold cyan/blue, clearly distinct from output
-      { token: 'operator',           foreground: '79c0ff' },
-      { token: 'operator.command',   foreground: '79c0ff', fontStyle: 'bold' },
-      // > output lines — green, clearly distinct from commands
-      { token: 'string',             foreground: 'a8d8a8' },
-      { token: 'string.output',      foreground: 'a8d8a8' },
-      { token: 'string.include',     foreground: 'ffa657', fontStyle: 'italic' },
-      { token: 'string.escape.tag',  foreground: 'ff7b72' },
-      { token: 'type',               foreground: 'ffa657' },
-      { token: 'type.file',          foreground: 'ffa657' },
-      { token: 'type.print',         foreground: 'a8d8a8' },
-      { token: 'attribute',          foreground: 'e3b341' },
-      { token: 'attribute.name',     foreground: 'e3b341' },
-      { token: 'delimiter',          foreground: '6e7681' },
-      { token: 'number',             foreground: 'e3b341' },
-      { token: 'number.duration',    foreground: 'e3b341' },
-      { token: 'text',               foreground: 'c9d1d9' },
+      { token: '',            foreground: 'c9d1d9' },
+      { token: 'cs-section', foreground: '7c6af7', fontStyle: 'bold' },
+      { token: 'cs-comment', foreground: '6e7681', fontStyle: 'italic' },
+      { token: 'cs-block',   foreground: 'd2a8ff', fontStyle: 'bold' },
+      { token: 'cs-cmd',     foreground: '79c0ff', fontStyle: 'bold' },
+      { token: 'cs-out',     foreground: 'a8d8a8' },
+      { token: 'cs-print',   foreground: 'a8d8a8' },
+      { token: 'cs-file',    foreground: 'ffa657' },
+      { token: 'cs-include', foreground: 'ffa657', fontStyle: 'italic' },
+      { token: 'cs-tag',     foreground: 'ff7b72' },
+      { token: 'cs-kw',      foreground: '7c6af7' },
+      { token: 'cs-dim',     foreground: '6e7681', fontStyle: 'italic' },
+      { token: 'cs-raw',     foreground: 'ff7b72' },
+      { token: 'cs-wait',    foreground: 'e3b341' },
+      { token: 'cs-marker',  foreground: 'd2a8ff' },
+      { token: 'cs-key',     foreground: 'e3b341' },
+      { token: 'cs-delim',   foreground: '6e7681' },
+      { token: 'cs-num',     foreground: 'e3b341' },
+      { token: 'cs-text',    foreground: 'c9d1d9' },
     ],
     colors: {
       'editor.background':            '#161b22',
@@ -186,35 +160,27 @@ export function registerCastscript(monaco: typeof Monaco): void {
 
   monaco.editor.defineTheme('cast-light', {
     base: 'vs',
-    inherit: false,
+    inherit: true,
     rules: [
-      { token: '',                   foreground: '24292f' },
-      { token: 'keyword.section',    foreground: '6e5fdb', fontStyle: 'bold' },
-      { token: 'keyword',            foreground: '6e5fdb' },
-      { token: 'keyword.set',        foreground: '6e5fdb' },
-      { token: 'keyword.type',       foreground: '8250df' },
-      { token: 'keyword.hidden',     foreground: '57606a', fontStyle: 'italic' },
-      { token: 'keyword.raw',        foreground: 'cf222e' },
-      { token: 'comment',            foreground: '57606a', fontStyle: 'italic' },
-      { token: 'tag',                foreground: '8250df', fontStyle: 'bold' },
-      { token: 'tag.marker',         foreground: '8250df' },
-      // $ command lines — bold dark-blue, clearly distinct from output
-      { token: 'operator',           foreground: '0550ae' },
-      { token: 'operator.command',   foreground: '0550ae', fontStyle: 'bold' },
-      // > output lines — green, clearly distinct from commands
-      { token: 'string',             foreground: '1a7f37' },
-      { token: 'string.output',      foreground: '1a7f37' },
-      { token: 'string.include',     foreground: 'bc4c00', fontStyle: 'italic' },
-      { token: 'string.escape.tag',  foreground: 'cf222e' },
-      { token: 'type',               foreground: 'bc4c00' },
-      { token: 'type.file',          foreground: 'bc4c00' },
-      { token: 'type.print',         foreground: '1a7f37' },
-      { token: 'attribute',          foreground: '953800' },
-      { token: 'attribute.name',     foreground: '953800' },
-      { token: 'delimiter',          foreground: '57606a' },
-      { token: 'number',             foreground: '953800' },
-      { token: 'number.duration',    foreground: '953800' },
-      { token: 'text',               foreground: '24292f' },
+      { token: '',            foreground: '24292f' },
+      { token: 'cs-section', foreground: '6e5fdb', fontStyle: 'bold' },
+      { token: 'cs-comment', foreground: '57606a', fontStyle: 'italic' },
+      { token: 'cs-block',   foreground: '8250df', fontStyle: 'bold' },
+      { token: 'cs-cmd',     foreground: '0550ae', fontStyle: 'bold' },
+      { token: 'cs-out',     foreground: '1a7f37' },
+      { token: 'cs-print',   foreground: '1a7f37' },
+      { token: 'cs-file',    foreground: 'bc4c00' },
+      { token: 'cs-include', foreground: 'bc4c00', fontStyle: 'italic' },
+      { token: 'cs-tag',     foreground: 'cf222e' },
+      { token: 'cs-kw',      foreground: '6e5fdb' },
+      { token: 'cs-dim',     foreground: '57606a', fontStyle: 'italic' },
+      { token: 'cs-raw',     foreground: 'cf222e' },
+      { token: 'cs-wait',    foreground: '953800' },
+      { token: 'cs-marker',  foreground: '8250df' },
+      { token: 'cs-key',     foreground: '953800' },
+      { token: 'cs-delim',   foreground: '57606a' },
+      { token: 'cs-num',     foreground: '953800' },
+      { token: 'cs-text',    foreground: '24292f' },
     ],
     colors: {
       'editor.background':            '#ffffff',
