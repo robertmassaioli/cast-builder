@@ -135,7 +135,7 @@ export function registerCastscript(monaco: typeof Monaco): void {
   // ── Themes ─────────────────────────────────────────────────────────────────
   monaco.editor.defineTheme('cast-dark', {
     base: 'vs-dark',
-    inherit: true,
+    inherit: false,
     rules: [
       // Use empty-string token match to reset ALL inherited Monaco base colours
       { token: '',                   foreground: 'c9d1d9' },
@@ -186,7 +186,7 @@ export function registerCastscript(monaco: typeof Monaco): void {
 
   monaco.editor.defineTheme('cast-light', {
     base: 'vs',
-    inherit: true,
+    inherit: false,
     rules: [
       { token: '',                   foreground: '24292f' },
       { token: 'keyword.section',    foreground: '6e5fdb', fontStyle: 'bold' },
