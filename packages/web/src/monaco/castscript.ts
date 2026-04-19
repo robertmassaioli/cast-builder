@@ -33,14 +33,17 @@ export function registerCastscript(monaco: typeof Monaco): void {
         [/^\[.+\]$/, 'tag'],
 
         // Script directives (must be checked before config keys)
+        // Match the directive prefix token, then enter a state for the rest of the line.
+        // IMPORTANT: '>' must be checked before '>>' would shadow it (actually >> is longer so ok).
+        // We match the FULL prefix including leading ^ so Monarch knows these are line-start rules.
+        [/^>>\s+.*$/, 'type.file'],          // >> file — whole line orange (no styled content)
         [/^\$\s+/, { token: 'operator.command', next: '@commandLine' }],
-        [/^>>\s+/, { token: 'type.file', next: '@restOfLine' }],
         [/^>\s?/,  { token: 'string.output', next: '@styledLine' }],
         [/^print:\s*/, { token: 'type.print', next: '@styledLine' }],
         [/^type:\s*/,  { token: 'keyword.type', next: '@restOfLine' }],
         [/^hidden:\s*/, { token: 'keyword.hidden', next: '@restOfLine' }],
         [/^raw:\s*/,    { token: 'keyword.raw', next: '@restOfLine' }],
-        [/^(wait|idle):\s*/,  { token: 'number.duration', next: '@duration' }],
+        [/^(wait|idle):\s*/, { token: 'number.duration', next: '@duration' }],
         [/^(marker|resize):\s*/, { token: 'tag.marker', next: '@restOfLine' }],
         [/^clear$/,   'keyword'],
         [/^include:\s*/, { token: 'string.include', next: '@restOfLine' }],
@@ -55,19 +58,19 @@ export function registerCastscript(monaco: typeof Monaco): void {
       ],
 
       commandLine: [
+        // End of line FIRST — prevents catch-all consuming it
+        [/$/, { token: '', next: '@pop' }],
         // Style tags inside command lines e.g. {bold: text}
-        [/\{(?:[a-z-]+ )*[a-z-]+(?:\s+[a-z-]+)*:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
+        [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
         [/\}/, 'string.escape.tag'],
-        [/[^{}]+/, 'operator.command'],
-        [/$/, '', '@pop'],
+        [/[^{}\r\n]+/, 'operator.command'],
       ],
 
       commandStyled: [
-        // Inside {bold: ...} within a command line
+        [/$/, { token: '', next: '@pop' }],
         [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@commandStyled' }],
         [/\}/, { token: 'string.escape.tag', next: '@pop' }],
-        [/[^{}]+/, 'operator.command'],
-        [/$/, '', '@pop'],
+        [/[^{}\r\n]+/, 'operator.command'],
       ],
 
       setLine: [
@@ -78,30 +81,27 @@ export function registerCastscript(monaco: typeof Monaco): void {
       ],
 
       styledLine: [
-        // Inline style tags: {modifier: text} or {bold green: text} or {#rrggbb: text}
-        // The modifier name(s) and colon get the tag token
+        [/$/, { token: '', next: '@pop' }],
         [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@styleTagContent' }],
         [/\}/, 'string.escape.tag'],
-        [/[^{}]+/, 'string.output'],
-        [/$/, '', '@pop'],
+        [/[^{}\r\n]+/, 'string.output'],
       ],
 
       styleTagContent: [
-        // Content inside {style: HERE} — can contain nested style tags
+        [/$/, { token: '', next: '@pop' }],
         [/\{(?:[a-z-]+ )*[a-z-]+:|#[0-9a-fA-F]{6}:/, { token: 'string.escape.tag', next: '@styleTagContent' }],
         [/\}/, { token: 'string.escape.tag', next: '@pop' }],
-        [/[^{}]+/, 'string.output'],
-        [/$/, '', '@pop'],
+        [/[^{}\r\n]+/, 'string.output'],
       ],
 
       duration: [
+        [/$/, { token: '', next: '@pop' }],
         [/\d+(?:\.\d+)?s|\d+ms/, 'number'],
-        [/$/, '', '@pop'],
       ],
 
       restOfLine: [
-        [/.+/, 'text'],
-        [/$/, '', '@pop'],
+        [/$/, { token: '', next: '@pop' }],
+        [/[^\r\n]+/, 'text'],
       ],
     },
   });
