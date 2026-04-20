@@ -10,11 +10,95 @@
  */
 import type * as Monaco from 'monaco-editor';
 
-let registered = false;
-
 export function registerCastscript(monaco: typeof Monaco): void {
-  if (registered) return;
-  registered = true;
+
+  // ── Themes FIRST — must be defined before tokenizer and editor creation ────
+  // Monaco caches token→colour mappings at editor creation time using whatever
+  // theme is active. Define themes before registering the language/tokenizer.
+
+  monaco.editor.defineTheme('cast-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: '',            foreground: 'c9d1d9' },
+      { token: 'cssection',  foreground: '7c6af7', fontStyle: 'bold' },
+      { token: 'cscomment',  foreground: '6e7681', fontStyle: 'italic' },
+      { token: 'csblock',    foreground: 'd2a8ff', fontStyle: 'bold' },
+      { token: 'cscmd',      foreground: '79c0ff', fontStyle: 'bold' },
+      { token: 'csout',      foreground: 'a8d8a8' },
+      { token: 'csprint',    foreground: 'a8d8a8' },
+      { token: 'csfile',     foreground: 'ffa657' },
+      { token: 'csinclude',  foreground: 'ffa657', fontStyle: 'italic' },
+      { token: 'cstag',      foreground: 'ff7b72' },
+      { token: 'cskw',       foreground: '7c6af7' },
+      { token: 'csdim',      foreground: '6e7681', fontStyle: 'italic' },
+      { token: 'csraw',      foreground: 'ff7b72' },
+      { token: 'cswait',     foreground: 'e3b341' },
+      { token: 'csmarker',   foreground: 'd2a8ff' },
+      { token: 'cskey',      foreground: 'e3b341' },
+      { token: 'csdelim',    foreground: '6e7681' },
+      { token: 'csnum',      foreground: 'e3b341' },
+      { token: 'cstext',     foreground: 'c9d1d9' },
+    ],
+    colors: {
+      'editor.background':            '#161b22',
+      'editor.foreground':            '#c9d1d9',
+      'editor.lineHighlightBackground': '#21262d',
+      'editorLineNumber.foreground':  '#6e7681',
+      'editorLineNumber.activeForeground': '#c9d1d9',
+      'editor.selectionBackground':   '#2d2563',
+      'editor.findMatchBackground':   '#2d2563',
+      'editor.findMatchHighlightBackground': '#1a173a',
+      'editorCursor.foreground':      '#7c6af7',
+      'editorWidget.background':      '#1c2128',
+      'editorWidget.border':          '#30363d',
+      'input.background':             '#21262d',
+      'input.border':                 '#30363d',
+      'focusBorder':                  '#7c6af7',
+    },
+  });
+
+  monaco.editor.defineTheme('cast-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: '',            foreground: '24292f' },
+      { token: 'cssection',  foreground: '6e5fdb', fontStyle: 'bold' },
+      { token: 'cscomment',  foreground: '57606a', fontStyle: 'italic' },
+      { token: 'csblock',    foreground: '8250df', fontStyle: 'bold' },
+      { token: 'cscmd',      foreground: '0550ae', fontStyle: 'bold' },
+      { token: 'csout',      foreground: '1a7f37' },
+      { token: 'csprint',    foreground: '1a7f37' },
+      { token: 'csfile',     foreground: 'bc4c00' },
+      { token: 'csinclude',  foreground: 'bc4c00', fontStyle: 'italic' },
+      { token: 'cstag',      foreground: 'cf222e' },
+      { token: 'cskw',       foreground: '6e5fdb' },
+      { token: 'csdim',      foreground: '57606a', fontStyle: 'italic' },
+      { token: 'csraw',      foreground: 'cf222e' },
+      { token: 'cswait',     foreground: '953800' },
+      { token: 'csmarker',   foreground: '8250df' },
+      { token: 'cskey',      foreground: '953800' },
+      { token: 'csdelim',    foreground: '57606a' },
+      { token: 'csnum',      foreground: '953800' },
+      { token: 'cstext',     foreground: '24292f' },
+    ],
+    colors: {
+      'editor.background':            '#ffffff',
+      'editor.foreground':            '#24292f',
+      'editor.lineHighlightBackground': '#f6f8fa',
+      'editorLineNumber.foreground':  '#57606a',
+      'editorLineNumber.activeForeground': '#24292f',
+      'editor.selectionBackground':   '#ddd9f9',
+      'editor.findMatchBackground':   '#ddd9f9',
+      'editor.findMatchHighlightBackground': '#ede9fc',
+      'editorCursor.foreground':      '#6e5fdb',
+      'editorWidget.background':      '#f6f8fa',
+      'editorWidget.border':          '#d0d7de',
+      'input.background':             '#ffffff',
+      'input.border':                 '#d0d7de',
+      'focusBorder':                  '#6e5fdb',
+    },
+  });
 
   // ── Language registration ──────────────────────────────────────────────────
   monaco.languages.register({ id: 'castscript', extensions: ['.castscript'] });
@@ -116,91 +200,6 @@ export function registerCastscript(monaco: typeof Monaco): void {
         start: /^\$\s+/,
         end: /^(?:\$|\[|---)/,
       },
-    },
-  });
-
-  // ── Themes ─────────────────────────────────────────────────────────────────
-  monaco.editor.defineTheme('cast-dark', {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [
-      { token: '',            foreground: 'c9d1d9' },
-      { token: 'cssection',  foreground: '7c6af7', fontStyle: 'bold' },
-      { token: 'cscomment',  foreground: '6e7681', fontStyle: 'italic' },
-      { token: 'csblock',    foreground: 'd2a8ff', fontStyle: 'bold' },
-      { token: 'cscmd',      foreground: '79c0ff', fontStyle: 'bold' },
-      { token: 'csout',      foreground: 'a8d8a8' },
-      { token: 'csprint',    foreground: 'a8d8a8' },
-      { token: 'csfile',     foreground: 'ffa657' },
-      { token: 'csinclude',  foreground: 'ffa657', fontStyle: 'italic' },
-      { token: 'cstag',      foreground: 'ff7b72' },
-      { token: 'cskw',       foreground: '7c6af7' },
-      { token: 'csdim',      foreground: '6e7681', fontStyle: 'italic' },
-      { token: 'csraw',      foreground: 'ff7b72' },
-      { token: 'cswait',     foreground: 'e3b341' },
-      { token: 'csmarker',   foreground: 'd2a8ff' },
-      { token: 'cskey',      foreground: 'e3b341' },
-      { token: 'csdelim',    foreground: '6e7681' },
-      { token: 'csnum',      foreground: 'e3b341' },
-      { token: 'cstext',     foreground: 'c9d1d9' },
-    ],
-    colors: {
-      'editor.background':            '#161b22',
-      'editor.foreground':            '#c9d1d9',
-      'editor.lineHighlightBackground': '#21262d',
-      'editorLineNumber.foreground':  '#6e7681',
-      'editorLineNumber.activeForeground': '#c9d1d9',
-      'editor.selectionBackground':   '#2d2563',
-      'editor.findMatchBackground':   '#2d2563',
-      'editor.findMatchHighlightBackground': '#1a173a',
-      'editorCursor.foreground':      '#7c6af7',
-      'editorWidget.background':      '#1c2128',
-      'editorWidget.border':          '#30363d',
-      'input.background':             '#21262d',
-      'input.border':                 '#30363d',
-      'focusBorder':                  '#7c6af7',
-    },
-  });
-
-  monaco.editor.defineTheme('cast-light', {
-    base: 'vs',
-    inherit: true,
-    rules: [
-      { token: '',            foreground: '24292f' },
-      { token: 'cssection',  foreground: '6e5fdb', fontStyle: 'bold' },
-      { token: 'cscomment',  foreground: '57606a', fontStyle: 'italic' },
-      { token: 'csblock',    foreground: '8250df', fontStyle: 'bold' },
-      { token: 'cscmd',      foreground: '0550ae', fontStyle: 'bold' },
-      { token: 'csout',      foreground: '1a7f37' },
-      { token: 'csprint',    foreground: '1a7f37' },
-      { token: 'csfile',     foreground: 'bc4c00' },
-      { token: 'csinclude',  foreground: 'bc4c00', fontStyle: 'italic' },
-      { token: 'cstag',      foreground: 'cf222e' },
-      { token: 'cskw',       foreground: '6e5fdb' },
-      { token: 'csdim',      foreground: '57606a', fontStyle: 'italic' },
-      { token: 'csraw',      foreground: 'cf222e' },
-      { token: 'cswait',     foreground: '953800' },
-      { token: 'csmarker',   foreground: '8250df' },
-      { token: 'cskey',      foreground: '953800' },
-      { token: 'csdelim',    foreground: '57606a' },
-      { token: 'csnum',      foreground: '953800' },
-      { token: 'cstext',     foreground: '24292f' },
-    ],
-    colors: {
-      'editor.background':            '#ffffff',
-      'editor.foreground':            '#24292f',
-      'editor.lineHighlightBackground': '#f6f8fa',
-      'editorLineNumber.foreground':  '#57606a',
-      'editorLineNumber.activeForeground': '#24292f',
-      'editor.selectionBackground':   '#ddd9f9',
-      'editor.findMatchBackground':   '#ddd9f9',
-      'editor.findMatchHighlightBackground': '#ede9fc',
-      'editorCursor.foreground':      '#6e5fdb',
-      'editorWidget.background':      '#f6f8fa',
-      'editorWidget.border':          '#d0d7de',
-      'input.background':             '#ffffff',
-      'input.border':                 '#d0d7de',
-      'focusBorder':                  '#6e5fdb',
     },
   });
 
