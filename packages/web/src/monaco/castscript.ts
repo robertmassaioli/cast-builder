@@ -143,13 +143,13 @@ export function registerCastscript(monaco: typeof Monaco): void {
           ['cskw', 'cskey', 'csdelim', 'cstext']],
 
         // print: — may contain style tags, needs sub-state
-        [/^(print:\s*)/, { token: 'csprint', next: '@styledLine' }],
+        [/^print:\s*/, { token: 'csprint', next: '@styledLine' }],
 
         // $ command — may contain style tags
-        [/^(\$\s+)/, { token: 'cscmd', next: '@commandLine' }],
+        [/^\$\s+/, { token: 'cscmd', next: '@commandLine' }],
 
         // > output — may contain style tags (most common)
-        [/^(>\s?)/, { token: 'csout', next: '@styledLine' }],
+        [/^>\s?/, { token: 'csout', next: '@styledLine' }],
 
         // fallback
         [/.+/, 'cstext'],
