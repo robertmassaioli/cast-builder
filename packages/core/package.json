@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Core library for parsing and compiling .castscript files into asciinema .cast recordings",
   "type": "module",
+  "main": "./dist/index.js",
   "exports": {
     ".": {
       "import": "./dist/index.js",
