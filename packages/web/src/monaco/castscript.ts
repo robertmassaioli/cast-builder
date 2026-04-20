@@ -21,6 +21,10 @@ export function registerCastscript(monaco: typeof Monaco): void {
 
   // ── Monarch tokenizer ──────────────────────────────────────────────────────
   monaco.languages.setMonarchTokensProvider('castscript', {
+    // Prevent Monaco appending '.castscript' to all token names.
+    // Without this, 'cscmd' becomes 'cscmd.castscript' which won't match
+    // our theme rules defined as 'cscmd'.
+    tokenPostfix: '',
     tokenizer: {
       root: [
         [/^--- (config|script) ---$/, 'cssection'],
