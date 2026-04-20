@@ -105,36 +105,39 @@ export function registerCastscript(monaco: typeof Monaco): void {
 
   // ── Monarch tokenizer ──────────────────────────────────────────────────────
   monaco.languages.setMonarchTokensProvider('castscript', {
-    // tokenPostfix: '' prevents Monaco appending '.castscript' to token names.
     tokenPostfix: '',
-    // defaultToken emitted when no rule matches — use cstext (plain colour)
     defaultToken: 'cstext',
     tokenizer: {
       root: [
-        // Single-token whole-line rules — no sub-state needed
+        // Whole-line single-token rules
         [/^--- (config|script) ---$/, 'cssection'],
         [/^\s*#.*$/,                  'cscomment'],
         [/^\[.+\]$/,                  'csblock'],
-        [/^>>\s+.*$/,                 'csfile'],
         [/^clear$/,                   'cskw'],
 
-        // Config keys: match "key:" as two tokens (key + colon)
-        [/^(title|width|height|prompt|typing-speed|idle-time|theme|output-format|typing-seed)(\s*:)(\s*.*)?$/,
+        // Config keys
+        [/^(title|width|height|prompt|typing-speed|idle-time|theme|output-format|typing-seed)(\s*:)(.*)$/,
           ['cskey', 'csdelim', 'cstext']],
 
-        // wait/idle: duration value on same line
-        [/^(wait|idle)(\s*:\s*)(\d+(?:\.\d+)?s|\d+ms)?(.*)$/,
+        // wait/idle with duration
+        [/^(wait|idle)(\s*:\s*)(\d+(?:\.\d+)?s|\d+ms)(.*)$/,
           ['cswait', 'csdelim', 'csnum', 'cstext']],
+        [/^(wait|idle)(\s*:\s*)(.*)$/,
+          ['cswait', 'csdelim', 'cstext']],
 
-        // marker/resize: rest is plain text
+        // marker/resize
         [/^(marker|resize)(\s*:\s*)(.*)$/,
           ['csmarker', 'csdelim', 'cstext']],
 
-        // include:
+        // include
         [/^(include)(\s*:\s*)(.*)$/,
           ['csinclude', 'csdelim', 'cstext']],
 
-        // type:/hidden:/raw: rest is plain text
+        // file output
+        [/^(>>)(\s+)(.*)$/,
+          ['csfile', 'cstext', 'csfile']],
+
+        // type/raw/hidden
         [/^(type|raw)(\s*:\s*)(.*)$/,  ['cskw', 'csdelim', 'cstext']],
         [/^(hidden)(\s*:\s*)(.*)$/,    ['csdim', 'csdelim', 'cstext']],
 
@@ -142,47 +145,49 @@ export function registerCastscript(monaco: typeof Monaco): void {
         [/^(set\s+)([\w-]+)(\s*:\s*)(.*)$/,
           ['cskw', 'cskey', 'csdelim', 'cstext']],
 
-        // print: — may contain style tags, needs sub-state
-        [/^print:\s*/, { token: 'csprint', next: '@styledLine' }],
+        // $ command lines — tokenize prefix + rest with style-tag sub-state
+        // Use @push so the sub-state pops back to root explicitly
+        [/^\$\s+/, { token: 'cscmd', next: '@cmdContent' }],
 
-        // $ command — may contain style tags
-        [/^\$\s+/, { token: 'cscmd', next: '@commandLine' }],
+        // > output lines
+        [/^>\s?/, { token: 'csout', next: '@outContent' }],
 
-        // > output — may contain style tags (most common)
-        [/^>\s?/, { token: 'csout', next: '@styledLine' }],
+        // print: lines
+        [/^print:\s*/, { token: 'csprint', next: '@outContent' }],
 
         // fallback
         [/.+/, 'cstext'],
       ],
 
-      // Sub-states — only used for lines that need style-tag tokenization.
-      // We use @rematch to pop cleanly without emitting an empty token.
-      commandLine: [
-        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@commandStyled' }],
+      // Per-line sub-states: these use a line-start sentinel to self-terminate.
+      // Any rule starting with ^ (matchOnlyAtLineStart) pops back to root
+      // when a new line begins — we exploit this by adding a ^ rule that pops.
+      cmdContent: [
+        // If we see a line-start character that isn't part of the command,
+        // pop back. We detect this by matching ^ at start of a NEW line.
+        [/^\$\s+/, { token: '@rematch', next: '@pop' }],
+        [/^>\s?/,  { token: '@rematch', next: '@pop' }],
+        [/^(?:marker|wait|idle|include|set|print|type|hidden|raw|clear|>>|\[|#|---)\b/,
+          { token: '@rematch', next: '@pop' }],
+        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@nestedTag' }],
         [/\}/,                    'cstag'],
         [/[^{}\r\n]+/,            'cscmd'],
-        [/$/, { token: '@rematch', next: '@pop' }],
       ],
 
-      commandStyled: [
-        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@commandStyled' }],
-        [/\}/,                   { token: 'cstag', next: '@pop' }],
-        [/[^{}\r\n]+/,            'cscmd'],
-        [/$/, { token: '@rematch', next: '@pop' }],
-      ],
-
-      styledLine: [
-        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@styleTagContent' }],
+      outContent: [
+        [/^\$\s+/, { token: '@rematch', next: '@pop' }],
+        [/^>\s?/,  { token: '@rematch', next: '@pop' }],
+        [/^(?:marker|wait|idle|include|set|print|type|hidden|raw|clear|>>|\[|#|---)\b/,
+          { token: '@rematch', next: '@pop' }],
+        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@nestedTag' }],
         [/\}/,                    'cstag'],
         [/[^{}\r\n]+/,            'csout'],
-        [/$/, { token: '@rematch', next: '@pop' }],
       ],
 
-      styleTagContent: [
-        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@styleTagContent' }],
+      nestedTag: [
+        [/\{(?:[a-z#][^:}]*):/,  { token: 'cstag', next: '@nestedTag' }],
         [/\}/,                   { token: 'cstag', next: '@pop' }],
         [/[^{}\r\n]+/,            'csout'],
-        [/$/, { token: '@rematch', next: '@pop' }],
       ],
     },
   });
