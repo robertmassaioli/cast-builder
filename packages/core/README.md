@@ -4,6 +4,192 @@ Core library for parsing and compiling `.castscript` files into [asciinema](http
 
 Zero runtime dependencies. Browser-safe — no Node.js built-ins. Runs in Node.js, Deno, Bun, Cloudflare Workers, and web browsers.
 
+---
+
+## The `.castscript` format
+
+A `.castscript` file has two sections separated by section headers.
+
+```
+--- config ---
+title:        My Demo
+width:        120
+height:       30
+prompt:       user@host:~/project$ 
+typing-speed: normal
+idle-time:    1.0
+
+--- script ---
+
+marker: Start
+
+$ echo "Hello, world!"
+> Hello, world!
+
+wait: 1s
+clear
+```
+
+### Config section
+
+The `--- config ---` section sets global properties for the recording. All keys are optional — sensible defaults apply.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `title` | string | _(none)_ | Recording title shown in the player |
+| `width` | integer | `120` | Terminal width in columns |
+| `height` | integer | `30` | Terminal height in rows |
+| `shell` | string | `bash` | Shell name (informational, stored in header) |
+| `prompt` | string | `$ ` | Prompt string prepended before each `$` command. Trailing space is preserved. Supports inline style tags. |
+| `theme` | string | `default` | Theme name (informational, stored in header) |
+| `typing-speed` | speed | `normal` | Default typing speed — `slow`, `normal`, `fast`, `instant`, or `Nms` (e.g. `60ms`) |
+| `typing-seed` | integer | _(random)_ | Seed for the typing-jitter RNG — set for fully reproducible output |
+| `idle-time` | float (seconds) | `1.0` | Pause inserted between consecutive command blocks |
+| `output-format` | `v2` \| `v3` | `v3` | Asciicast output format. v3 uses delta timestamps (recommended); v2 uses absolute timestamps |
+| `env` | `KEY=VALUE` | _(none)_ | Environment variable stored in the cast header. Repeat the key for multiple entries. |
+
+### Script section
+
+The `--- script ---` section contains an ordered list of **directives**, one per line. Blank lines and `#` comment lines are ignored.
+
+#### Commands and output
+
+| Directive | Description |
+|---|---|
+| `$ command` | Type the command at the prompt with a realistic typing animation, then press Enter. The `idle-time` gap is inserted before every command after the first. |
+| `> text` | Print an output line. Supports inline style tags. A small timing delay between lines simulates real output. |
+| `>> path/to/file` | Embed the contents of a file as output lines. Requires a `FileResolver` to be provided. |
+
+#### Text input
+
+| Directive | Description |
+|---|---|
+| `type: text` | Type text with a typing animation but **without** pressing Enter. Useful for interactive prompts. |
+| `hidden: text` | Type text with timing but **without echoing** it (e.g. for passwords). Only a newline is emitted. |
+| `print: text` | Instantly emit text with no typing animation. Supports inline style tags. |
+
+#### Timing and control
+
+| Directive | Description |
+|---|---|
+| `wait: 2s` | Insert a pause. Use `s` for seconds or `ms` for milliseconds (e.g. `wait: 500ms`, `wait: 1.5s`). |
+| `clear` | Clear the terminal screen (emits `ESC[2J ESC[H`). |
+| `resize: 80x24` | Change terminal dimensions mid-recording (`cols x rows`). |
+| `marker: Label` | Insert a named chapter marker. Markers appear in the asciinema player's timeline. |
+
+#### Mid-script overrides
+
+| Directive | Description |
+|---|---|
+| `set typing-speed: fast` | Override the typing speed for all subsequent directives. |
+| `set prompt: root@server:~# ` | Change the prompt for all subsequent `$` commands. |
+| `set idle-time: 0.5` | Change the between-command idle gap. |
+| `set title: New Title` | Update the title (informational). |
+
+#### Includes and blocks
+
+| Directive | Description |
+|---|---|
+| `[block-name]` | Define a named block. Everything from this label to the next label (or end of file) belongs to the block. |
+| `include: other.castscript` | Inline the full script content of another file. |
+| `include: other.castscript#block-name` | Inline only the named `[block-name]` section from another file. |
+
+Both `include:` and `>>` require a `FileResolver` to be provided to `compile()`. Includes can nest up to 16 levels deep (circular includes are detected and rejected).
+
+#### Raw output
+
+| Directive | Description |
+|---|---|
+| `raw: \x1b[1mBold\x1b[0m` | Emit a raw ANSI escape sequence verbatim. Use when the inline style tag system doesn't cover what you need (e.g. blinking, 256-colour codes, cursor positioning). Supports `\xNN`, `\n`, `\r`, `\t`, `\\`. |
+
+#### Comments
+
+```
+# This line is a comment and is completely ignored
+```
+
+### Inline style tags
+
+Output lines (`>`) and `print:` directives support inline style tags to colour and format text without writing raw ANSI codes by hand:
+
+```
+> Status: {bold green: OK}
+> {red: Error}: something went wrong
+> {#ff6600: Custom true-colour text}
+> {bold: {underline: nested styles}}
+```
+
+**Syntax:** `{modifier modifier …: content}` — one or more space-separated modifiers, a colon-space, then the content. Tags nest arbitrarily.
+
+**Text modifiers:**
+
+| Modifier | Effect |
+|---|---|
+| `bold` | Bold |
+| `dim` | Dimmed / faint |
+| `italic` | Italic |
+| `underline` | Underline |
+
+**Foreground colours:**
+
+`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `#rrggbb` (24-bit hex)
+
+**Background colours:**
+
+`bg-black`, `bg-red`, `bg-green`, `bg-yellow`, `bg-blue`, `bg-magenta`, `bg-cyan`, `bg-white`
+
+Multiple modifiers can be combined in any order: `{bold red: text}`, `{bold bg-blue: text}`, `{italic #00aaff: text}`.
+
+### Typing speed values
+
+The `typing-speed` config key and the `set typing-speed:` directive accept:
+
+| Value | Avg delay per character |
+|---|---|
+| `instant` | 0 ms (no animation) |
+| `fast` | ~30 ms |
+| `normal` | ~80 ms |
+| `slow` | ~150 ms |
+| `Nms` | Exactly N ms (e.g. `60ms`) |
+
+A small random jitter (±25% of the average) is added to each character delay to make typing look natural. Set `typing-seed` for fully deterministic output.
+
+### Complete example
+
+```
+--- config ---
+title:        Git Workflow Demo
+width:        100
+height:       28
+prompt:       user@host:~/project$ 
+typing-speed: normal
+idle-time:    0.8
+
+--- script ---
+
+marker: Initialise
+
+$ git init
+> Initialized empty Git repository in /home/user/project/.git/
+
+marker: Stage and Commit
+
+$ git add .
+
+$ git commit -m "Initial commit"
+> {bold: [main (root-commit) 1a2b3c4]} Initial commit
+>  3 files changed, {green: 42 insertions(+)}
+
+marker: Push
+
+$ git push origin main
+> {dim: Enumerating objects: 5, done.}
+> To github.com:user/project.git
+>  * {green: [new branch]}      main -> main
+```
+
+---
+
 ## Install
 
 ```bash

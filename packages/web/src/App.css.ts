@@ -60,6 +60,24 @@ export const themeToggle = style({
   cursor: 'pointer',
 });
 
+export const docsBtn = style({
+  color: vars.color.textMuted,
+  textDecoration: 'none',
+  fontSize: '13px',
+  padding: `${vars.space.xs} ${vars.space.sm}`,
+  borderRadius: vars.radius.md,
+  border: `1px solid ${vars.color.btnBorder}`,
+  background: 'transparent',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  fontFamily: vars.font.ui,
+  ':hover': {
+    background: vars.color.btnHover,
+    color: vars.color.text,
+  },
+  '@media': { '(max-width: 380px)': { display: 'none' } },
+});
+
 export const githubLink = style({
   color: vars.color.textMuted,
   textDecoration: 'none',

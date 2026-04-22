@@ -4,6 +4,7 @@ import { Player } from './components/Player.js';
 import { Footer } from './components/Footer.js';
 import { ShareBanner } from './components/ShareBanner.js';
 import { ExamplesMenu } from './components/ExamplesMenu.js';
+import { DocModal } from './components/DocModal.js';
 import { compileScript, debounce, type CompileResult } from './compiler/compile.js';
 import {
   getCurrentScript,
@@ -43,6 +44,7 @@ export function App() {
   const [speed, setSpeed] = useState<number>(() => getPlayerSpeed());
   const [splitPct, setSplitPct] = useState(50);
   const [shareState, setShareState] = useState<ShareState>('idle');
+  const [showDocs, setShowDocs] = useState(false);
   const dragging = useRef(false);
   const mainRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +186,13 @@ export function App() {
         <div class={s.headerActions}>
           <ExamplesMenu onSelect={setSource} />
           <button
+            class={s.docsBtn}
+            onClick={() => setShowDocs(true)}
+            title="castscript language reference"
+          >
+            📖 Docs
+          </button>
+          <button
             class={s.themeToggle}
             onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
             title="Toggle dark/light theme"
@@ -270,6 +279,9 @@ export function App() {
         shareState={shareState}
         onShare={handleShare}
       />
+
+      {/* Docs modal */}
+      {showDocs && <DocModal onClose={() => setShowDocs(false)} />}
     </div>
   );
 }
